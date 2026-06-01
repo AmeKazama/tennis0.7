@@ -1,0 +1,75 @@
+# IDE settings
+.idea/
+.vscode/
+
+# Python virtual environments and caches
+.venv/
+venv/
+env/
+site-packages/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.egg-info/
+
+# Secrets and local environment
+.env
+.env.*
+
+# Python build, test, and type-check caches
+build/
+dist/
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend / uni-app generated files
+node_modules/
+unpackage/
+.hbuilderx/
+
+# Media and large local test files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wmv
+*.mp3
+tts_audio/
+
+# Model weights and generated analysis datasets
+*.pt
+*.tflite
+*.keras
+264/
+skeleton_data/
+services/skeleton_data/
+standard_skeletons/
+services/standard_skeletons/
+*_final.json
+serve*.json
+all_shots.csv
+
+# Certificates and private keys
+*.pem
+*.key
+
+# Archives and local packages
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.whl
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
