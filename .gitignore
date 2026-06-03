@@ -1,4 +1,4 @@
-# IDE settings
+﻿# IDE settings
 .idea/
 .vscode/
 
@@ -54,6 +54,20 @@ all_shots.csv
 # Keep the 264 standard library dataset versioned
 !264/
 !264/**
+!264/*.mp4
+!264/*.mov
+!264/*.avi
+!264/*.mkv
+!264/*.json
+!264/*_final.json
+!tennis0.7/264/
+!tennis0.7/264/**
+!tennis0.7/264/*.mp4
+!tennis0.7/264/*.mov
+!tennis0.7/264/*.avi
+!tennis0.7/264/*.mkv
+!tennis0.7/264/*.json
+!tennis0.7/264/*_final.json
 
 # Certificates and private keys
 *.pem
@@ -80,3 +94,4 @@ court_detection_debug.jpg
 *.log
 *.tmp
 *.bak
+
