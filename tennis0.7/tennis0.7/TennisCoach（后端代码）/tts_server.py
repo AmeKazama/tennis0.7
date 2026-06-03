@@ -47,4 +47,4 @@ async def api_tts(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="10.24.51.159", port=9002)
+    uvicorn.run(app, host="192.168.1.53", port=9002)

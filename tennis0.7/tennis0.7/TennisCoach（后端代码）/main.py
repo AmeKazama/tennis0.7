@@ -3,6 +3,7 @@ import asyncio
 import json
 import traceback
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -43,6 +44,27 @@ except ImportError as e:
 
 
 app = FastAPI(title="网球 AI 教练后端")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.options("/{full_path:path}")
+async def options_preflight(full_path: str):
+    return JSONResponse(
+        content={"ok": True},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 
 # 注册日记/语音相关接口
 app.include_router(diary_router)
@@ -335,7 +357,7 @@ if __name__ == "__main__":
     logger.info("[START] 网球 AI 教练后端服务启动中...")
     uvicorn.run(
         app,
-        host="10.24.51.159",
+        host="0.0.0.0",
         port=9000,
         log_level="info",
         # ws_max_size=16777216,

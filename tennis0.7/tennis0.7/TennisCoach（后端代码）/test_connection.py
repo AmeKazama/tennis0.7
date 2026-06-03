@@ -9,7 +9,7 @@ async def test():
     
     urls = [
         "ws://localhost:9000/ws/joints",
-        "ws://10.24.51.159:9000/ws/joints"
+        "ws://192.168.1.53:9000/ws/joints"
     ]
     
     for url in urls:

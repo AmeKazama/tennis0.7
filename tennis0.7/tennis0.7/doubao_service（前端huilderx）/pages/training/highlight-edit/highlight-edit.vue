@@ -112,7 +112,7 @@
 import { ref, computed } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
 
-const API_BASE_URL = 'http://10.24.51.159:9000'
+const API_BASE_URL = 'http://192.168.1.53:9000'
 
 const toWebUrl = (path) => {
 	if (!path) return path

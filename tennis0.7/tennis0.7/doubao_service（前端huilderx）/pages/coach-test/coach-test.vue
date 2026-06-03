@@ -175,15 +175,15 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 
 // ===================== 【改成你电脑的局域网IP】 =====================
-const API_BASE_URL = 'http://10.24.51.159:9000';
-const WS_URL = 'ws://10.24.51.159:9000/ws/joints';
+const API_BASE_URL = 'http://192.168.1.53:9000';
+const WS_URL = 'ws://192.168.1.53:9000/ws/joints';
 // ==================================================================
 
 // http 变成 https
-//const API_BASE_URL = 'https://10.24.51.159:9000';
+//const API_BASE_URL = 'https://192.168.1.53:9000';
 
 // ws 变成 wss
-//const WS_URL = 'wss://10.24.51.159:9000/ws/joints';
+//const WS_URL = 'wss://192.168.1.53:9000/ws/joints';
 
 const RECONNECT_INTERVAL = 3000;
 const TYPING_SPEED = 50;
@@ -246,7 +246,7 @@ const playNextTTS = () => {
     console.log("🔊 播放TTS：", text);
 
     uni.request({
-        url: "http://10.24.51.159:9002/api/tts",
+        url: "http://192.168.1.53:9002/api/tts",
         method: "POST",
         header: { "Content-Type": "application/json" },
         data: { text },
