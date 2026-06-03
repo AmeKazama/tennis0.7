@@ -42,8 +42,6 @@ unpackage/
 tts_audio/
 
 # Model weights and generated analysis datasets
-*.pt
-*.pth
 *.tflite
 *.keras
 264/
