@@ -42,8 +42,6 @@ unpackage/
 tts_audio/
 
 # Model weights and generated analysis datasets
-*.tflite
-*.keras
 264/
 skeleton_data/
 services/skeleton_data/
