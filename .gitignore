@@ -17,6 +17,7 @@ __pycache__/
 # Secrets and local environment
 .env
 .env.*
+!.env.example
 
 # Python build, test, and type-check caches
 build/
