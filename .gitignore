@@ -51,6 +51,10 @@ services/standard_skeletons/
 serve*.json
 all_shots.csv
 
+# Keep the 264 standard library dataset versioned
+!264/
+!264/**
+
 # Certificates and private keys
 *.pem
 *.key

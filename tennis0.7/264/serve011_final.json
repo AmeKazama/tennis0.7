@@ -1,0 +1,942 @@
+[
+  {
+    "name": "serve011_serve",
+    "shot_type": "serve",
+    "segment_range": [
+      28,
+      76
+    ],
+    "impact_frame": 64,
+    "phase_boundaries": {
+      "start": 28,
+      "backswing_peak": 55,
+      "forward_start": 60,
+      "impact": 64,
+      "end": 76
+    },
+    "fps": 30.0,
+    "total_frames": 93,
+    "angles": [
+      {
+        "frame": 28,
+        "angles": {
+          "right_elbow": 122.2,
+          "left_elbow": 130.37,
+          "right_shoulder": 46.3,
+          "left_shoulder": 51.67,
+          "right_wrist": 177.49,
+          "left_wrist": 156.86,
+          "torso_rotation": 11.08,
+          "right_knee": 157.88,
+          "left_knee": 124.97,
+          "right_hip": 137.34,
+          "left_hip": 148.27,
+          "trunk_lean": 175.06
+        }
+      },
+      {
+        "frame": 29,
+        "angles": {
+          "right_elbow": 122.13,
+          "left_elbow": 129.86,
+          "right_shoulder": 44.46,
+          "left_shoulder": 50.89,
+          "right_wrist": 176.05,
+          "left_wrist": 138.8,
+          "torso_rotation": 10.74,
+          "right_knee": 157.18,
+          "left_knee": 124.95,
+          "right_hip": 137.19,
+          "left_hip": 148.59,
+          "trunk_lean": 175.09
+        }
+      },
+      {
+        "frame": 30,
+        "angles": {
+          "right_elbow": 119.81,
+          "left_elbow": 144.23,
+          "right_shoulder": 41.88,
+          "left_shoulder": 48.19,
+          "right_wrist": 174.76,
+          "left_wrist": 165.43,
+          "torso_rotation": 21.22,
+          "right_knee": 153.51,
+          "left_knee": 124.41,
+          "right_hip": 136.09,
+          "left_hip": 149.36,
+          "trunk_lean": 175.43
+        }
+      },
+      {
+        "frame": 31,
+        "angles": {
+          "right_elbow": 118.93,
+          "left_elbow": 150.09,
+          "right_shoulder": 39.9,
+          "left_shoulder": 42.99,
+          "right_wrist": 174.68,
+          "left_wrist": 174.41,
+          "torso_rotation": 38.04,
+          "right_knee": 148.38,
+          "left_knee": 124.75,
+          "right_hip": 134.48,
+          "left_hip": 153.6,
+          "trunk_lean": 176.79
+        }
+      },
+      {
+        "frame": 32,
+        "angles": {
+          "right_elbow": 117.78,
+          "left_elbow": 152.19,
+          "right_shoulder": 40.06,
+          "left_shoulder": 38.56,
+          "right_wrist": 179.57,
+          "left_wrist": 175.82,
+          "torso_rotation": 69.89,
+          "right_knee": 145.83,
+          "left_knee": 123.72,
+          "right_hip": 132.4,
+          "left_hip": 155.4,
+          "trunk_lean": 177.09
+        }
+      },
+      {
+        "frame": 33,
+        "angles": {
+          "right_elbow": 125.99,
+          "left_elbow": 157.37,
+          "right_shoulder": 49.74,
+          "left_shoulder": 33.86,
+          "right_wrist": 170.31,
+          "left_wrist": 178.71,
+          "torso_rotation": 17.07,
+          "right_knee": 141.96,
+          "left_knee": 122.12,
+          "right_hip": 130.93,
+          "left_hip": 157.24,
+          "trunk_lean": 177.76
+        }
+      },
+      {
+        "frame": 34,
+        "angles": {
+          "right_elbow": 131.25,
+          "left_elbow": 163.8,
+          "right_shoulder": 63.45,
+          "left_shoulder": 28.69,
+          "right_wrist": 169.18,
+          "left_wrist": 178.22,
+          "torso_rotation": 10.86,
+          "right_knee": 133.03,
+          "left_knee": 120.25,
+          "right_hip": 129.08,
+          "left_hip": 160.61,
+          "trunk_lean": 179.48
+        }
+      },
+      {
+        "frame": 35,
+        "angles": {
+          "right_elbow": 135.67,
+          "left_elbow": 168.04,
+          "right_shoulder": 75.22,
+          "left_shoulder": 24.93,
+          "right_wrist": 168.83,
+          "left_wrist": 175.71,
+          "torso_rotation": 11.02,
+          "right_knee": 129.49,
+          "left_knee": 119.88,
+          "right_hip": 127.38,
+          "left_hip": 163.0,
+          "trunk_lean": 179.81
+        }
+      },
+      {
+        "frame": 36,
+        "angles": {
+          "right_elbow": 137.02,
+          "left_elbow": 170.12,
+          "right_shoulder": 95.36,
+          "left_shoulder": 21.38,
+          "right_wrist": 176.63,
+          "left_wrist": 178.53,
+          "torso_rotation": 14.35,
+          "right_knee": 126.74,
+          "left_knee": 113.54,
+          "right_hip": 125.31,
+          "left_hip": 160.51,
+          "trunk_lean": 179.18
+        }
+      },
+      {
+        "frame": 37,
+        "angles": {
+          "right_elbow": 146.09,
+          "left_elbow": 175.36,
+          "right_shoulder": 112.57,
+          "left_shoulder": 18.35,
+          "right_wrist": 177.52,
+          "left_wrist": 167.1,
+          "torso_rotation": 17.65,
+          "right_knee": 124.82,
+          "left_knee": 109.24,
+          "right_hip": 127.28,
+          "left_hip": 161.08,
+          "trunk_lean": 179.77
+        }
+      },
+      {
+        "frame": 38,
+        "angles": {
+          "right_elbow": 147.05,
+          "left_elbow": 173.44,
+          "right_shoulder": 114.04,
+          "left_shoulder": 16.23,
+          "right_wrist": 179.0,
+          "left_wrist": 170.23,
+          "torso_rotation": 18.08,
+          "right_knee": 126.39,
+          "left_knee": 108.97,
+          "right_hip": 129.0,
+          "left_hip": 162.39,
+          "trunk_lean": 179.14
+        }
+      },
+      {
+        "frame": 39,
+        "angles": {
+          "right_elbow": 164.83,
+          "left_elbow": 172.98,
+          "right_shoulder": 134.06,
+          "left_shoulder": 9.27,
+          "right_wrist": 170.85,
+          "left_wrist": 177.28,
+          "torso_rotation": 25.43,
+          "right_knee": 121.34,
+          "left_knee": 109.75,
+          "right_hip": 130.04,
+          "left_hip": 165.7,
+          "trunk_lean": 177.82
+        }
+      },
+      {
+        "frame": 40,
+        "angles": {
+          "right_elbow": 163.95,
+          "left_elbow": 168.82,
+          "right_shoulder": 141.52,
+          "left_shoulder": 3.86,
+          "right_wrist": 172.71,
+          "left_wrist": 173.61,
+          "torso_rotation": 32.33,
+          "right_knee": 114.48,
+          "left_knee": 108.25,
+          "right_hip": 129.31,
+          "left_hip": 167.3,
+          "trunk_lean": 177.15
+        }
+      },
+      {
+        "frame": 41,
+        "angles": {
+          "right_elbow": 162.65,
+          "left_elbow": 165.92,
+          "right_shoulder": 145.03,
+          "left_shoulder": 0.2,
+          "right_wrist": 171.99,
+          "left_wrist": 170.32,
+          "torso_rotation": 35.04,
+          "right_knee": 110.4,
+          "left_knee": 108.47,
+          "right_hip": 130.58,
+          "left_hip": 170.98,
+          "trunk_lean": 175.98
+        }
+      },
+      {
+        "frame": 42,
+        "angles": {
+          "right_elbow": 158.26,
+          "left_elbow": 161.77,
+          "right_shoulder": 147.92,
+          "left_shoulder": 4.84,
+          "right_wrist": 172.59,
+          "left_wrist": 175.37,
+          "torso_rotation": 36.36,
+          "right_knee": 101.01,
+          "left_knee": 107.15,
+          "right_hip": 129.8,
+          "left_hip": 175.3,
+          "trunk_lean": 173.93
+        }
+      },
+      {
+        "frame": 43,
+        "angles": {
+          "right_elbow": 157.68,
+          "left_elbow": 158.66,
+          "right_shoulder": 151.18,
+          "left_shoulder": 4.63,
+          "right_wrist": 170.78,
+          "left_wrist": 175.78,
+          "torso_rotation": 33.86,
+          "right_knee": 98.89,
+          "left_knee": 103.02,
+          "right_hip": 128.43,
+          "left_hip": 174.49,
+          "trunk_lean": 173.78
+        }
+      },
+      {
+        "frame": 44,
+        "angles": {
+          "right_elbow": 154.65,
+          "left_elbow": 153.48,
+          "right_shoulder": 152.87,
+          "left_shoulder": 6.7,
+          "right_wrist": 172.74,
+          "left_wrist": 174.4,
+          "torso_rotation": 35.42,
+          "right_knee": 84.67,
+          "left_knee": 100.47,
+          "right_hip": 127.29,
+          "left_hip": 177.44,
+          "trunk_lean": 170.97
+        }
+      },
+      {
+        "frame": 45,
+        "angles": {
+          "right_elbow": 154.23,
+          "left_elbow": 156.1,
+          "right_shoulder": 156.44,
+          "left_shoulder": 4.29,
+          "right_wrist": 171.77,
+          "left_wrist": 170.38,
+          "torso_rotation": 36.3,
+          "right_knee": 84.88,
+          "left_knee": 100.65,
+          "right_hip": 129.26,
+          "left_hip": 179.55,
+          "trunk_lean": 169.78
+        }
+      },
+      {
+        "frame": 46,
+        "angles": {
+          "right_elbow": 154.83,
+          "left_elbow": 129.29,
+          "right_shoulder": 157.61,
+          "left_shoulder": 5.16,
+          "right_wrist": 172.24,
+          "left_wrist": 127.32,
+          "torso_rotation": 36.19,
+          "right_knee": 86.74,
+          "left_knee": 97.04,
+          "right_hip": 135.21,
+          "left_hip": 178.03,
+          "trunk_lean": 167.0
+        }
+      },
+      {
+        "frame": 47,
+        "angles": {
+          "right_elbow": 155.59,
+          "left_elbow": 139.05,
+          "right_shoulder": 158.05,
+          "left_shoulder": 1.1,
+          "right_wrist": 172.84,
+          "left_wrist": 130.67,
+          "torso_rotation": 35.3,
+          "right_knee": 88.74,
+          "left_knee": 94.15,
+          "right_hip": 139.84,
+          "left_hip": 175.9,
+          "trunk_lean": 165.09
+        }
+      },
+      {
+        "frame": 48,
+        "angles": {
+          "right_elbow": 157.42,
+          "left_elbow": 89.08,
+          "right_shoulder": 158.9,
+          "left_shoulder": 6.47,
+          "right_wrist": 171.15,
+          "left_wrist": 138.95,
+          "torso_rotation": 34.41,
+          "right_knee": 94.77,
+          "left_knee": 92.98,
+          "right_hip": 150.67,
+          "left_hip": 174.43,
+          "trunk_lean": 161.8
+        }
+      },
+      {
+        "frame": 49,
+        "angles": {
+          "right_elbow": 158.36,
+          "left_elbow": 83.36,
+          "right_shoulder": 160.47,
+          "left_shoulder": 8.98,
+          "right_wrist": 175.38,
+          "left_wrist": 163.65,
+          "torso_rotation": 36.17,
+          "right_knee": 99.77,
+          "left_knee": 97.67,
+          "right_hip": 158.71,
+          "left_hip": 173.18,
+          "trunk_lean": 160.51
+        }
+      },
+      {
+        "frame": 50,
+        "angles": {
+          "right_elbow": 161.56,
+          "left_elbow": 64.92,
+          "right_shoulder": 162.32,
+          "left_shoulder": 3.52,
+          "right_wrist": 177.94,
+          "left_wrist": 163.47,
+          "torso_rotation": 31.49,
+          "right_knee": 101.49,
+          "left_knee": 97.8,
+          "right_hip": 166.2,
+          "left_hip": 179.8,
+          "trunk_lean": 159.89
+        }
+      },
+      {
+        "frame": 51,
+        "angles": {
+          "right_elbow": 164.15,
+          "left_elbow": 45.84,
+          "right_shoulder": 162.17,
+          "left_shoulder": 8.38,
+          "right_wrist": 173.55,
+          "left_wrist": 168.92,
+          "torso_rotation": 33.62,
+          "right_knee": 108.81,
+          "left_knee": 94.58,
+          "right_hip": 169.43,
+          "left_hip": 175.02,
+          "trunk_lean": 158.98
+        }
+      },
+      {
+        "frame": 52,
+        "angles": {
+          "right_elbow": 165.42,
+          "left_elbow": 36.25,
+          "right_shoulder": 161.23,
+          "left_shoulder": 8.85,
+          "right_wrist": 177.44,
+          "left_wrist": 173.2,
+          "torso_rotation": 38.16,
+          "right_knee": 111.81,
+          "left_knee": 94.81,
+          "right_hip": 173.18,
+          "left_hip": 175.19,
+          "trunk_lean": 157.88
+        }
+      },
+      {
+        "frame": 53,
+        "angles": {
+          "right_elbow": 160.43,
+          "left_elbow": 35.18,
+          "right_shoulder": 157.86,
+          "left_shoulder": 3.43,
+          "right_wrist": 179.78,
+          "left_wrist": 167.35,
+          "torso_rotation": 40.8,
+          "right_knee": 117.12,
+          "left_knee": 94.31,
+          "right_hip": 174.16,
+          "left_hip": 171.71,
+          "trunk_lean": 157.8
+        }
+      },
+      {
+        "frame": 54,
+        "angles": {
+          "right_elbow": 166.82,
+          "left_elbow": 45.79,
+          "right_shoulder": 154.19,
+          "left_shoulder": 13.56,
+          "right_wrist": 167.71,
+          "left_wrist": 171.97,
+          "torso_rotation": 47.63,
+          "right_knee": 124.51,
+          "left_knee": 92.1,
+          "right_hip": 171.47,
+          "left_hip": 167.44,
+          "trunk_lean": 157.96
+        }
+      },
+      {
+        "frame": 55,
+        "angles": {
+          "right_elbow": 172.92,
+          "left_elbow": 50.38,
+          "right_shoulder": 152.57,
+          "left_shoulder": 28.18,
+          "right_wrist": 163.6,
+          "left_wrist": 179.29,
+          "torso_rotation": 50.93,
+          "right_knee": 123.71,
+          "left_knee": 94.82,
+          "right_hip": 165.44,
+          "left_hip": 164.09,
+          "trunk_lean": 159.72
+        }
+      },
+      {
+        "frame": 56,
+        "angles": {
+          "right_elbow": 172.29,
+          "left_elbow": 40.8,
+          "right_shoulder": 150.52,
+          "left_shoulder": 16.96,
+          "right_wrist": 163.12,
+          "left_wrist": 171.06,
+          "torso_rotation": 53.42,
+          "right_knee": 125.67,
+          "left_knee": 95.47,
+          "right_hip": 164.44,
+          "left_hip": 163.57,
+          "trunk_lean": 159.76
+        }
+      },
+      {
+        "frame": 57,
+        "angles": {
+          "right_elbow": 173.19,
+          "left_elbow": 13.16,
+          "right_shoulder": 139.16,
+          "left_shoulder": 12.33,
+          "right_wrist": 168.52,
+          "left_wrist": 170.08,
+          "torso_rotation": 48.99,
+          "right_knee": 126.47,
+          "left_knee": 103.06,
+          "right_hip": 167.12,
+          "left_hip": 167.64,
+          "trunk_lean": 160.11
+        }
+      },
+      {
+        "frame": 58,
+        "angles": {
+          "right_elbow": 176.49,
+          "left_elbow": 3.18,
+          "right_shoulder": 128.86,
+          "left_shoulder": 20.14,
+          "right_wrist": 169.37,
+          "left_wrist": 168.91,
+          "torso_rotation": 50.0,
+          "right_knee": 135.93,
+          "left_knee": 111.82,
+          "right_hip": 171.57,
+          "left_hip": 171.04,
+          "trunk_lean": 160.56
+        }
+      },
+      {
+        "frame": 59,
+        "angles": {
+          "right_elbow": 176.29,
+          "left_elbow": 5.17,
+          "right_shoulder": 119.13,
+          "left_shoulder": 12.56,
+          "right_wrist": 179.83,
+          "left_wrist": 161.75,
+          "torso_rotation": 57.03,
+          "right_knee": 150.41,
+          "left_knee": 119.37,
+          "right_hip": 179.14,
+          "left_hip": 178.56,
+          "trunk_lean": 159.0
+        }
+      },
+      {
+        "frame": 60,
+        "angles": {
+          "right_elbow": 177.93,
+          "left_elbow": 23.03,
+          "right_shoulder": 90.81,
+          "left_shoulder": 3.41,
+          "right_wrist": 169.55,
+          "left_wrist": 161.85,
+          "torso_rotation": 58.87,
+          "right_knee": 161.76,
+          "left_knee": 136.69,
+          "right_hip": 172.38,
+          "left_hip": 171.98,
+          "trunk_lean": 156.81
+        }
+      },
+      {
+        "frame": 61,
+        "angles": {
+          "right_elbow": 165.62,
+          "left_elbow": 17.45,
+          "right_shoulder": 60.98,
+          "left_shoulder": 64.3,
+          "right_wrist": 119.62,
+          "left_wrist": 172.05,
+          "torso_rotation": 80.0,
+          "right_knee": 169.38,
+          "left_knee": 160.63,
+          "right_hip": 163.05,
+          "left_hip": 162.89,
+          "trunk_lean": 154.34
+        }
+      },
+      {
+        "frame": 62,
+        "angles": {
+          "right_elbow": 169.48,
+          "left_elbow": 46.52,
+          "right_shoulder": 43.7,
+          "left_shoulder": 107.56,
+          "right_wrist": 126.23,
+          "left_wrist": 102.36,
+          "torso_rotation": 61.87,
+          "right_knee": 169.35,
+          "left_knee": 163.65,
+          "right_hip": 167.88,
+          "left_hip": 165.64,
+          "trunk_lean": 157.81
+        }
+      },
+      {
+        "frame": 63,
+        "angles": {
+          "right_elbow": 162.78,
+          "left_elbow": 108.41,
+          "right_shoulder": 39.31,
+          "left_shoulder": 125.24,
+          "right_wrist": 139.72,
+          "left_wrist": 179.18,
+          "torso_rotation": 59.22,
+          "right_knee": 168.35,
+          "left_knee": 168.94,
+          "right_hip": 171.54,
+          "left_hip": 167.75,
+          "trunk_lean": 160.06
+        }
+      },
+      {
+        "frame": 64,
+        "angles": {
+          "right_elbow": 136.05,
+          "left_elbow": 163.68,
+          "right_shoulder": 32.12,
+          "left_shoulder": 125.72,
+          "right_wrist": 145.96,
+          "left_wrist": 170.83,
+          "torso_rotation": 60.52,
+          "right_knee": 168.52,
+          "left_knee": 171.74,
+          "right_hip": 170.41,
+          "left_hip": 168.64,
+          "trunk_lean": 159.0
+        }
+      },
+      {
+        "frame": 65,
+        "angles": {
+          "right_elbow": 136.43,
+          "left_elbow": 165.18,
+          "right_shoulder": 34.19,
+          "left_shoulder": 122.27,
+          "right_wrist": 136.35,
+          "left_wrist": 167.12,
+          "torso_rotation": 60.21,
+          "right_knee": 169.0,
+          "left_knee": 173.16,
+          "right_hip": 172.59,
+          "left_hip": 169.65,
+          "trunk_lean": 160.11
+        }
+      },
+      {
+        "frame": 66,
+        "angles": {
+          "right_elbow": 142.74,
+          "left_elbow": 167.99,
+          "right_shoulder": 42.41,
+          "left_shoulder": 112.12,
+          "right_wrist": 134.2,
+          "left_wrist": 165.95,
+          "torso_rotation": 56.51,
+          "right_knee": 169.51,
+          "left_knee": 172.96,
+          "right_hip": 173.41,
+          "left_hip": 170.47,
+          "trunk_lean": 159.21
+        }
+      },
+      {
+        "frame": 67,
+        "angles": {
+          "right_elbow": 140.83,
+          "left_elbow": 159.49,
+          "right_shoulder": 36.57,
+          "left_shoulder": 95.7,
+          "right_wrist": 141.52,
+          "left_wrist": 61.86,
+          "torso_rotation": 56.77,
+          "right_knee": 172.26,
+          "left_knee": 173.44,
+          "right_hip": 169.21,
+          "left_hip": 172.17,
+          "trunk_lean": 158.95
+        }
+      },
+      {
+        "frame": 68,
+        "angles": {
+          "right_elbow": 125.4,
+          "left_elbow": 102.52,
+          "right_shoulder": 18.1,
+          "left_shoulder": 78.52,
+          "right_wrist": 151.92,
+          "left_wrist": 177.12,
+          "torso_rotation": 53.22,
+          "right_knee": 172.51,
+          "left_knee": 174.82,
+          "right_hip": 165.8,
+          "left_hip": 171.15,
+          "trunk_lean": 157.98
+        }
+      },
+      {
+        "frame": 69,
+        "angles": {
+          "right_elbow": 97.6,
+          "left_elbow": 126.91,
+          "right_shoulder": 5.36,
+          "left_shoulder": 44.16,
+          "right_wrist": 179.79,
+          "left_wrist": 171.69,
+          "torso_rotation": 51.87,
+          "right_knee": 176.36,
+          "left_knee": 175.22,
+          "right_hip": 157.53,
+          "left_hip": 173.19,
+          "trunk_lean": 157.37
+        }
+      },
+      {
+        "frame": 70,
+        "angles": {
+          "right_elbow": 112.18,
+          "left_elbow": 153.88,
+          "right_shoulder": 9.1,
+          "left_shoulder": 17.95,
+          "right_wrist": 161.56,
+          "left_wrist": 173.2,
+          "torso_rotation": 46.14,
+          "right_knee": 177.82,
+          "left_knee": 171.35,
+          "right_hip": 154.57,
+          "left_hip": 174.84,
+          "trunk_lean": 157.13
+        }
+      },
+      {
+        "frame": 71,
+        "angles": {
+          "right_elbow": 144.63,
+          "left_elbow": 151.41,
+          "right_shoulder": 9.94,
+          "left_shoulder": 16.14,
+          "right_wrist": 141.78,
+          "left_wrist": 165.41,
+          "torso_rotation": 38.94,
+          "right_knee": 175.84,
+          "left_knee": 168.72,
+          "right_hip": 154.67,
+          "left_hip": 177.3,
+          "trunk_lean": 157.35
+        }
+      },
+      {
+        "frame": 72,
+        "angles": {
+          "right_elbow": 147.82,
+          "left_elbow": 150.34,
+          "right_shoulder": 8.35,
+          "left_shoulder": 16.43,
+          "right_wrist": 147.14,
+          "left_wrist": 151.38,
+          "torso_rotation": 36.76,
+          "right_knee": 174.61,
+          "left_knee": 166.96,
+          "right_hip": 154.92,
+          "left_hip": 178.93,
+          "trunk_lean": 157.86
+        }
+      },
+      {
+        "frame": 73,
+        "angles": {
+          "right_elbow": 150.33,
+          "left_elbow": 145.69,
+          "right_shoulder": 19.85,
+          "left_shoulder": 13.93,
+          "right_wrist": 130.92,
+          "left_wrist": 177.47,
+          "torso_rotation": 23.16,
+          "right_knee": 169.01,
+          "left_knee": 148.18,
+          "right_hip": 155.2,
+          "left_hip": 165.86,
+          "trunk_lean": 159.9
+        }
+      },
+      {
+        "frame": 74,
+        "angles": {
+          "right_elbow": 136.19,
+          "left_elbow": 136.85,
+          "right_shoulder": 21.36,
+          "left_shoulder": 14.29,
+          "right_wrist": 147.85,
+          "left_wrist": 157.37,
+          "torso_rotation": 17.91,
+          "right_knee": 166.09,
+          "left_knee": 149.05,
+          "right_hip": 155.48,
+          "left_hip": 161.32,
+          "trunk_lean": 161.93
+        }
+      },
+      {
+        "frame": 75,
+        "angles": {
+          "right_elbow": 141.89,
+          "left_elbow": 127.7,
+          "right_shoulder": 27.79,
+          "left_shoulder": 16.15,
+          "right_wrist": 136.18,
+          "left_wrist": 150.91,
+          "torso_rotation": 12.64,
+          "right_knee": 167.56,
+          "left_knee": 157.13,
+          "right_hip": 160.25,
+          "left_hip": 158.66,
+          "trunk_lean": 164.44
+        }
+      },
+      {
+        "frame": 76,
+        "angles": {
+          "right_elbow": 138.15,
+          "left_elbow": 117.95,
+          "right_shoulder": 33.69,
+          "left_shoulder": 20.27,
+          "right_wrist": 140.0,
+          "left_wrist": 158.55,
+          "torso_rotation": 12.87,
+          "right_knee": 169.72,
+          "left_knee": 124.93,
+          "right_hip": 163.36,
+          "left_hip": 151.04,
+          "trunk_lean": 167.39
+        }
+      }
+    ],
+    "key_angles": {
+      "start": {
+        "frame": 28,
+        "angles": {
+          "right_elbow": 122.2,
+          "left_elbow": 130.37,
+          "right_shoulder": 46.3,
+          "left_shoulder": 51.67,
+          "right_wrist": 177.49,
+          "left_wrist": 156.86,
+          "torso_rotation": 11.08,
+          "right_knee": 157.88,
+          "left_knee": 124.97,
+          "right_hip": 137.34,
+          "left_hip": 148.27,
+          "trunk_lean": 175.06
+        }
+      },
+      "backswing_peak": {
+        "frame": 55,
+        "angles": {
+          "right_elbow": 172.92,
+          "left_elbow": 50.38,
+          "right_shoulder": 152.57,
+          "left_shoulder": 28.18,
+          "right_wrist": 163.6,
+          "left_wrist": 179.29,
+          "torso_rotation": 50.93,
+          "right_knee": 123.71,
+          "left_knee": 94.82,
+          "right_hip": 165.44,
+          "left_hip": 164.09,
+          "trunk_lean": 159.72
+        }
+      },
+      "forward_start": {
+        "frame": 60,
+        "angles": {
+          "right_elbow": 177.93,
+          "left_elbow": 23.03,
+          "right_shoulder": 90.81,
+          "left_shoulder": 3.41,
+          "right_wrist": 169.55,
+          "left_wrist": 161.85,
+          "torso_rotation": 58.87,
+          "right_knee": 161.76,
+          "left_knee": 136.69,
+          "right_hip": 172.38,
+          "left_hip": 171.98,
+          "trunk_lean": 156.81
+        }
+      },
+      "impact": {
+        "frame": 64,
+        "angles": {
+          "right_elbow": 136.05,
+          "left_elbow": 163.68,
+          "right_shoulder": 32.12,
+          "left_shoulder": 125.72,
+          "right_wrist": 145.96,
+          "left_wrist": 170.83,
+          "torso_rotation": 60.52,
+          "right_knee": 168.52,
+          "left_knee": 171.74,
+          "right_hip": 170.41,
+          "left_hip": 168.64,
+          "trunk_lean": 159.0
+        }
+      },
+      "end": {
+        "frame": 76,
+        "angles": {
+          "right_elbow": 138.15,
+          "left_elbow": 117.95,
+          "right_shoulder": 33.69,
+          "left_shoulder": 20.27,
+          "right_wrist": 140.0,
+          "left_wrist": 158.55,
+          "torso_rotation": 12.87,
+          "right_knee": 169.72,
+          "left_knee": 124.93,
+          "right_hip": 163.36,
+          "left_hip": 151.04,
+          "trunk_lean": 167.39
+        }
+      }
+    }
+  }
+]
