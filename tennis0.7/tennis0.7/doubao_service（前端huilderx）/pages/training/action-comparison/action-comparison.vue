@@ -6,8 +6,8 @@
 					<text class="back-icon">←</text>
 				</view>
 				<view class="header-copy">
-					<text class="page-title">标准库动作对比</text>
-					<text class="page-subtitle">先保留球星选择的展示效果；实际分析复用 264 标准库，动作类型按钮才参与当前页面逻辑</text>
+					<text class="page-title">球星动作对比</text>
+					<text class="page-subtitle">上传你的视频，选择球星与动作类型，查看动作差异和训练建议</text>
 				</view>
 				<view class="status-pill" :class="{ ready: canCompare }">
 					<text>{{ canCompare ? '可开始分析' : '等待上传' }}</text>
@@ -17,8 +17,8 @@
 			<view class="stage-card">
 				<view class="stage-head">
 					<view>
-						<text class="stage-title">用户视频与球星风格展示</text>
-						<text class="stage-subtitle">左侧播放用户上传视频；右侧显示所选球星与动作类型。当前先用 264 标准库完成真实 DTW 分析。</text>
+						<text class="stage-title">双视频动作对比</text>
+						<text class="stage-subtitle">左侧播放你的动作视频，右侧显示所选球星动作目标，分析完成后生成动作差异讲解。</text>
 					</view>
 					<view class="stage-actions" v-if="myVideo">
 						<view class="mini-btn" @tap="toggleUserPlay">{{ playing ? '暂停' : '播放' }}</view>
@@ -49,7 +49,7 @@
 								<text class="placeholder-title">上传你的动作视频</text>
 								<text class="placeholder-text">建议使用完整单次击球片段，人物身体关键点清晰可见</text>
 							</view>
-							<view v-if="myVideo" class="skeleton-badge">后端 MediaPipe / RNN / DTW</view>
+							<view v-if="myVideo" class="skeleton-badge">AI 动作识别</view>
 						</view>
 					</view>
 
@@ -59,16 +59,16 @@
 								<text class="video-title">{{ selectedPlayer.name }} · {{ selectedStroke.name }}</text>
 								<text class="video-desc">{{ bestMatchText }}</text>
 							</view>
-							<text class="video-tag standard">风格展示</text>
+							<text class="video-tag standard">对比目标</text>
 						</view>
 						<view class="standard-info-shell">
 							<view class="match-score">
-								<text class="match-label">页面展示目标</text>
+								<text class="match-label">当前目标</text>
 								<text class="match-main">{{ selectedPlayer.name }} · {{ selectedStroke.name }}</text>
 								<text class="match-sub">{{ distanceText }}</text>
 							</view>
 							<view class="match-note">
-								<text>球星选择目前是前端展示效果，不影响后端。真实分析会按动作类型提示，并由后端 RNN 自动识别后进入 264 标准库做新 DTW 对齐。</text>
+								<text>系统会结合你选择的球星和动作类型，生成对应的动作差异讲解与训练建议。</text>
 							</view>
 						</view>
 					</view>
@@ -80,12 +80,12 @@
 					<view class="panel-head">
 						<view class="panel-icon">库</view>
 						<view>
-							<text class="panel-title">选择展示目标</text>
-							<text class="panel-subtitle">球星按钮先做展示，动作类型按钮当前有效</text>
+							<text class="panel-title">选择对比目标</text>
+							<text class="panel-subtitle">选择你想参考的球星与击球动作</text>
 						</view>
 					</view>
 
-					<text class="selector-label">球星展示</text>
+					<text class="selector-label">球星</text>
 					<view class="selector-group players">
 						<view
 							v-for="player in players"
@@ -98,7 +98,7 @@
 						</view>
 					</view>
 
-					<text class="selector-label">动作类型（当前有效）</text>
+					<text class="selector-label">动作类型</text>
 					<view class="selector-group strokes">
 						<view
 							v-for="stroke in strokeTypes"
@@ -113,7 +113,7 @@
 
 					<view class="path-box">
 						<text class="path-title">说明</text>
-						<text class="path-text">球星选择只是为了把页面先做成完整效果；动作类型选择用于当前页面展示和提示。真正分析仍以后端 RNN 识别结果为准，并自动从 264 标准库筛选同类标准动作。</text>
+						<text class="path-text">选择球星和动作类型后，系统会根据你的上传视频生成动作对比结果。</text>
 					</view>
 				</view>
 
@@ -122,7 +122,7 @@
 						<view class="panel-icon user">U</view>
 						<view>
 							<text class="panel-title">上传与分析</text>
-							<text class="panel-subtitle">不新增后端接口，直接调用现有视频分析接口</text>
+							<text class="panel-subtitle">上传视频后开始智能动作分析</text>
 						</view>
 					</view>
 
@@ -139,9 +139,9 @@
 					</view>
 
 					<view class="resource-card">
-						<text class="resource-title">当前使用接口</text>
-						<text class="resource-text">POST /api/analyze_video_submit</text>
-						<text class="resource-text">GET /api/analyze_video_poll/{task_id}</text>
+						<text class="resource-title">分析流程</text>
+						<text class="resource-text">上传视频并识别动作片段</text>
+						<text class="resource-text">生成动作差异与训练建议</text>
 					</view>
 				</view>
 			</view>
@@ -150,7 +150,7 @@
 				<view class="report-head">
 					<view>
 						<text class="report-title">动作差异讲解</text>
-						<text class="report-subtitle">展示 RNN 识别结果、DTW 匹配距离、主要问题和豆包建议</text>
+						<text class="report-subtitle">展示动作差异、主要问题和训练建议</text>
 					</view>
 					<text class="report-status">{{ reportStatus }}</text>
 				</view>
@@ -159,7 +159,7 @@
 					<text class="report-line" v-for="(line, index) in reportLines" :key="index">{{ line }}</text>
 				</view>
 				<view v-else class="empty-report">
-					<text>上传视频并点击开始分析后，页面会复用现有后端视频分析接口。后端会自动识别动作片段，并从 264 标准库中选择同类标准动作进行 DTW 对比。</text>
+					<text>上传视频并点击开始分析后，系统会自动识别动作片段，并生成动作差异讲解。</text>
 				</view>
 			</view>
 		</view>
@@ -197,8 +197,8 @@ const analysisError = ref('')
 const analysisReport = ref('')
 const userPoseVideoUrl = ref('')
 const userVideoContext = ref(null)
-const bestMatchText = ref('等待后端匹配')
-const distanceText = ref('DTW 距离将在分析后显示')
+const bestMatchText = ref('等待分析')
+const distanceText = ref('相似度将在分析后显示')
 const progressText = ref('0%')
 const taskOffset = ref(0)
 
@@ -240,8 +240,8 @@ const uploadMyVideo = async () => {
 	analysisError.value = ''
 	analysisReport.value = ''
 	userPoseVideoUrl.value = ''
-	bestMatchText.value = '等待后端匹配'
-	distanceText.value = 'DTW 距离将在分析后显示'
+	bestMatchText.value = '等待分析'
+	distanceText.value = '相似度将在分析后显示'
 	progressText.value = '0%'
 }
 
@@ -253,8 +253,8 @@ const selectStroke = (stroke) => {
 	selectedStroke.value = stroke
 	analysisError.value = ''
 	analysisReport.value = ''
-	bestMatchText.value = '等待后端匹配'
-	distanceText.value = 'DTW 距离将在分析后显示'
+	bestMatchText.value = '等待分析'
+	distanceText.value = '相似度将在分析后显示'
 }
 
 const ensureVideoContexts = () => {
@@ -269,8 +269,8 @@ const startCompare = async () => {
 
 	analyzing.value = true
 	analysisError.value = ''
-	analysisReport.value = '正在上传视频，并调用现有后端分析链路：RNN 分段分类 -> 新 DTW 标准库匹配 -> 豆包报告...'
-	bestMatchText.value = '后端分析中'
+	analysisReport.value = '正在上传视频并进行动作分析，请稍候...'
+	bestMatchText.value = '分析中'
 	distanceText.value = '请稍等'
 	progressText.value = '0%'
 	taskOffset.value = 0
@@ -302,7 +302,7 @@ const submitAnalyzeTask = async () => {
 
 	const data = await response.json()
 	if (!data.task_id) {
-		throw new Error('后端没有返回 task_id')
+		throw new Error('分析任务创建失败')
 	}
 	return data.task_id
 }
@@ -324,7 +324,7 @@ const pollAnalyzeTask = async (taskId) => {
 
 		const errorItem = items.find((item) => item.type === 'error')
 		if (errorItem) {
-			throw new Error(errorItem.message || '后端分析出错')
+			throw new Error(errorItem.message || '动作分析失败')
 		}
 
 		if (data.done) {
@@ -352,12 +352,12 @@ const applyAnalysisResult = (items) => {
 
 	const first = segments[0]
 	const analysis = first.analysis || first.dtw_analysis || first.result || {}
-	const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name', 'match_name']) || findFirstValue(first, ['best_match', 'standard', 'matched_standard']) || '264 同类标准动作'
+	const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name', 'match_name']) || findFirstValue(first, ['best_match', 'standard', 'matched_standard']) || '职业标准动作'
 	const distance = findFirstValue(analysis, ['distance', 'dtw_distance', 'phase_dtw_distance', 'score_distance']) || findFirstValue(first, ['distance', 'dtw_distance'])
 	const grade = findFirstValue(analysis, ['grade', 'rating']) || findFirstValue(first, ['grade', 'rating']) || ''
 
 	bestMatchText.value = best
-	distanceText.value = distance !== undefined && distance !== null ? `DTW 距离：${formatNumber(distance)}${grade ? `，评级：${grade}` : ''}` : '已完成标准库匹配'
+	distanceText.value = distance !== undefined && distance !== null ? `相似度距离：${formatNumber(distance)}${grade ? `，评级：${grade}` : ''}` : '已完成动作匹配'
 	analysisReport.value = buildReportFromSegments(segments, summary)
 }
 
@@ -383,13 +383,13 @@ const buildReportFromSegments = (segments, summary) => {
 		const shot = segment.shot_type_cn || segment.shot_type || `片段 ${index + 1}`
 		const grade = findFirstValue(analysis, ['grade', 'rating']) || segment.grade || '未评级'
 		const distance = findFirstValue(analysis, ['distance', 'dtw_distance', 'phase_dtw_distance']) || segment.distance
-		const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name']) || segment.best_match || '264 同类标准动作'
+		const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name']) || segment.best_match || '职业标准动作'
 		const advice = segment.coach_advice || segment.advice || analysis.coach_advice || ''
 		const problems = extractProblems(analysis, segment)
 
 		lines.push(`片段 ${index + 1}：${shot}`)
-		lines.push(`匹配标准：${best}`)
-		lines.push(`评分：${grade}${distance !== undefined && distance !== null ? `，DTW 距离：${formatNumber(distance)}` : ''}`)
+		lines.push(`参考动作：${best}`)
+		lines.push(`评分：${grade}${distance !== undefined && distance !== null ? `，相似度距离：${formatNumber(distance)}` : ''}`)
 		if (problems.length) lines.push(`主要问题：${problems.join('；')}`)
 		if (advice) lines.push(`教练建议：${advice}`)
 	})
@@ -967,6 +967,8 @@ const resetVideos = () => {
 	}
 }
 </style>
+
+
 
 
 

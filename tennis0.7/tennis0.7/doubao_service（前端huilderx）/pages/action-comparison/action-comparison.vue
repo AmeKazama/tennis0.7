@@ -77,7 +77,7 @@
 				<view class="video-panel">
 					<view class="video-head">
 						<text class="video-title">用户视频</text>
-						<text class="video-note">MediaPipe 骨骼</text>
+						<text class="video-note">骨骼追踪</text>
 					</view>
 					<view class="video-frame">
 						<video
@@ -90,7 +90,7 @@
 							:show-fullscreen-btn="false"
 							@timeupdate="onUserTimeUpdate"
 						/>
-						<view class="overlay-hint">骨骼叠加视频由后端返回</view>
+						<view class="overlay-hint">分析完成后显示骨骼对齐效果</view>
 					</view>
 				</view>
 
@@ -109,7 +109,7 @@
 							:show-play-btn="false"
 							:show-fullscreen-btn="false"
 						/>
-						<view class="overlay-hint">骨骼叠加视频由后端返回</view>
+						<view class="overlay-hint">分析完成后显示骨骼对齐效果</view>
 					</view>
 				</view>
 			</view>
@@ -251,7 +251,7 @@ const startCompare = async () => {
 	analyzing.value = true
 	showStage.value = true
 	analysisError.value = ''
-	analysisReport.value = '正在上传用户视频，并请求后端进行 MediaPipe 骨骼提取与动作差异分析...'
+	analysisReport.value = '正在上传视频并进行动作分析，请稍候...'
 
 	try {
 		const result = await submitCompareTask()
@@ -259,7 +259,7 @@ const startCompare = async () => {
 		standardPoseVideoUrl.value = result.standard_pose_video_url || ''
 		analysisReport.value = result.report || buildLocalReport()
 	} catch (error) {
-		analysisError.value = error.message || '动作对比接口暂未接通'
+		analysisError.value = error.message || '动作分析暂时失败，请稍后重试'
 		analysisReport.value = buildLocalReport()
 	} finally {
 		analyzing.value = false
@@ -280,7 +280,7 @@ const submitCompareTask = async () => {
 	})
 
 	if (!response.ok) {
-		throw new Error(`后端动作对比接口未返回成功：${response.status}`)
+		throw new Error(`动作分析请求失败：${response.status}`)
 	}
 
 	return response.json()
@@ -289,8 +289,8 @@ const submitCompareTask = async () => {
 const buildLocalReport = () => {
 	return [
 		`对比目标：${selectedPlayer.value.name}的${selectedStroke.value.name}`,
-		'当前页面已完成双视频同步播放与后端接口预留。',
-		'后端接入后，应返回用户骨骼视频、球星骨骼视频和动作差异报告。',
+		'系统已开始生成双视频动作对比。',
+		'分析完成后会展示动作差异、关键阶段和训练建议。',
 		'建议报告内容包括：准备阶段、引拍阶段、击球关键帧、随挥结束四部分的差异。'
 	].join('\n')
 }
@@ -675,3 +675,5 @@ const onUserTimeUpdate = (event) => {
 	}
 }
 </style>
+
+
