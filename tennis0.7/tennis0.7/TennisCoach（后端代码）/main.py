@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from routers.diary import router as diary_router
+from routers.rally_cut import router as rally_router
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -45,10 +46,14 @@ app = FastAPI(title="网球 AI 教练后端")
 
 # 注册日记/语音相关接口
 app.include_router(diary_router)
+# 注册回合切割接口
+app.include_router(rally_router)
 
-# 创建上传目录并暴露静态资源
+# 创建目录并暴露静态资源
 Path("uploads/audio").mkdir(parents=True, exist_ok=True)
+Path("output_rallies").mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/output_rallies", StaticFiles(directory="output_rallies"), name="output_rallies")
 
 
 # 全局配置
@@ -330,7 +335,7 @@ if __name__ == "__main__":
     logger.info("[START] 网球 AI 教练后端服务启动中...")
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="10.24.51.159",
         port=9000,
         log_level="info",
         # ws_max_size=16777216,

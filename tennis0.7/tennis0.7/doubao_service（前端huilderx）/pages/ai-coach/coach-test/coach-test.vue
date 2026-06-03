@@ -195,8 +195,8 @@ const goBack = () => {
     uni.navigateBack();
 };
 
-const WS_URL = 'ws://172.20.10.3:9000/ws/joints';
-const API_BASE_URL = 'http://172.20.10.3:9000';
+const WS_URL = 'ws://10.24.51.159:9000/ws/joints';
+const API_BASE_URL = 'http://10.24.51.159:9000';
 const TTS_BASE_URL = API_BASE_URL.replace(':9000', ':9002');
 const RECONNECT_INTERVAL = 5000;
 const TYPING_SPEED = 50;

@@ -4,7 +4,7 @@ import json
 import random
 import sys
 
-WS_URL = "ws://192.168.1.104:9000/ws/joints"
+WS_URL = "ws://10.24.51.159:9000/ws/joints"
 
 # 预设姿势数据（包含描述和关节角度）
 POSE_PRESETS = {

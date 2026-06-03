@@ -42,6 +42,7 @@ tts_audio/
 
 # Model weights and generated analysis datasets
 *.pt
+*.pth
 *.tflite
 *.keras
 264/
@@ -68,6 +69,11 @@ all_shots.csv
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated rally cut files
+output_rallies/
+court_calib.json
+court_detection_debug.jpg
 
 # Logs and temporary files
 *.log
