@@ -251,6 +251,34 @@
 				"navigationBarTitleText": "个人主页",
 				"navigationStyle": "custom"
 			}
+		},
+		{
+			"path": "pages/moments/moments",
+			"style": {
+				"navigationBarTitleText": "朋友圈",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/moments/publish",
+			"style": {
+				"navigationBarTitleText": "发布动态",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/moments/moments-detail",
+			"style": {
+				"navigationBarTitleText": "动态详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/moments/moments-stats",
+			"style": {
+				"navigationBarTitleText": "数据统计",
+				"navigationStyle": "custom"
+			}
 		}
 	],
 	"globalStyle": {
