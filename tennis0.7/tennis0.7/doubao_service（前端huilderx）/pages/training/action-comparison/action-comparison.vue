@@ -18,7 +18,7 @@
 				<view class="stage-head">
 					<view>
 						<text class="stage-title">双视频动作对比</text>
-						<text class="stage-subtitle">左侧播放你的动作视频，右侧显示所选球星动作目标，分析完成后生成动作差异讲解。</text>
+						<text class="stage-subtitle">左侧播放你的原始动作视频，右侧在分析完成后播放骨骼识别回放，并生成动作差异讲解。</text>
 					</view>
 					<view class="stage-actions" v-if="myVideo">
 						<view class="mini-btn" @tap="toggleUserPlay">{{ playing ? '暂停' : '播放' }}</view>
@@ -33,15 +33,18 @@
 								<text class="video-title">我的动作</text>
 								<text class="video-desc">{{ myVideo ? myVideo.name : '还没有选择视频' }}</text>
 							</view>
-							<text class="video-tag">用户上传</text>
+							<text class="video-tag">{{ poseVideoUrl ? "骨骼回放" : "用户上传" }}</text>
 						</view>
 						<view class="video-shell" :class="{ empty: !myVideo }">
 							<video
 								v-if="myVideo"
 								id="userVideo"
+								:key="poseVideoUrl || myVideo.path"
 								class="compare-video"
-								:src="displayUserVideo"
+								:src="poseVideoUrl || myVideo.path"
 								:controls="true"
+								:autoplay="Boolean(poseVideoUrl)"
+								:muted="Boolean(poseVideoUrl)"
 								:show-center-play-btn="true"
 							/>
 							<view v-else class="video-placeholder" @tap="uploadMyVideo">
@@ -49,18 +52,6 @@
 								<text class="placeholder-title">上传你的动作视频</text>
 								<text class="placeholder-text">建议使用完整单次击球片段，人物身体关键点清晰可见</text>
 							</view>
-							<view v-if="showUserSkeletonOverlay" class="skeleton-layer user-skeleton" pointer-events="none">
-								<view class="skeleton-dot head"></view>
-								<view class="skeleton-line neck"></view>
-								<view class="skeleton-line shoulders"></view>
-								<view class="skeleton-line spine"></view>
-								<view class="skeleton-line left-arm"></view>
-								<view class="skeleton-line right-arm"></view>
-								<view class="skeleton-line hips"></view>
-								<view class="skeleton-line left-leg"></view>
-								<view class="skeleton-line right-leg"></view>
-							</view>
-							<view v-if="myVideo" class="skeleton-badge">骨骼识别</view>
 						</view>
 					</view>
 
@@ -72,26 +63,29 @@
 							</view>
 							<text class="video-tag standard">对比目标</text>
 						</view>
-						<view class="standard-info-shell">
-							<view v-if="showTargetSkeletonOverlay" class="skeleton-layer target-skeleton" pointer-events="none">
-								<view class="skeleton-dot head"></view>
-								<view class="skeleton-line neck"></view>
-								<view class="skeleton-line shoulders"></view>
-								<view class="skeleton-line spine"></view>
-								<view class="skeleton-line left-arm"></view>
-								<view class="skeleton-line right-arm"></view>
-								<view class="skeleton-line hips"></view>
-								<view class="skeleton-line left-leg"></view>
-								<view class="skeleton-line right-leg"></view>
+						<view class="video-shell" :class="{ empty: !standardPoseVideoUrl }">
+							<video
+								v-if="standardPoseVideoUrl"
+								id="poseVideo"
+								:key="standardPoseVideoUrl"
+								class="compare-video"
+								:src="standardPoseVideoUrl"
+								:controls="true"
+								:autoplay="Boolean(standardPoseVideoUrl)"
+								:muted="Boolean(standardPoseVideoUrl)"
+								:show-center-play-btn="true"
+							/>
+							<view v-else class="standard-info-shell">
+								<view class="match-score">
+									<text class="match-label">当前目标</text>
+									<text class="match-main">{{ selectedPlayer.name }} · {{ selectedStroke.name }}</text>
+									<text class="match-sub">{{ distanceText }}</text>
+								</view>
+								<view class="match-note">
+									<text>{{ analyzing ? '正在生成骨骼识别回放...' : '分析完成后会在这里播放带 MediaPipe 骨骼的人体回放。' }}</text>
+								</view>
 							</view>
-							<view class="match-score">
-								<text class="match-label">当前目标</text>
-								<text class="match-main">{{ selectedPlayer.name }} · {{ selectedStroke.name }}</text>
-								<text class="match-sub">{{ distanceText }}</text>
-							</view>
-							<view class="match-note">
-								<text>系统会结合你选择的球星和动作类型，生成对应的动作差异讲解与训练建议。</text>
-							</view>
+							<view v-if="standardPoseVideoUrl" class="skeleton-badge">标准骨骼回放</view>
 						</view>
 					</view>
 				</view>
@@ -189,7 +183,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
 
 const API_BASE_URL = 'http://127.0.0.1:9000'
@@ -217,16 +211,17 @@ const analyzing = ref(false)
 const playing = ref(false)
 const analysisError = ref('')
 const analysisReport = ref('')
-const userPoseVideoUrl = ref('')
+const poseVideoUrl = ref('')
+const standardPoseVideoUrl = ref('')
 const userVideoContext = ref(null)
+const poseVideoContext = ref(null)
+const playbackPlan = ref(null)
 const bestMatchText = ref('等待分析')
 const distanceText = ref('相似度将在分析后显示')
 const progressText = ref('0%')
 const taskOffset = ref(0)
 
-const displayUserVideo = computed(() => userPoseVideoUrl.value || myVideo.value?.path || '')
-const showUserSkeletonOverlay = computed(() => Boolean(myVideo.value && (analyzing.value || analysisReport.value)))
-const showTargetSkeletonOverlay = computed(() => Boolean(analyzing.value || analysisReport.value))
+
 const canCompare = computed(() => Boolean(myVideo.value))
 const reportStatus = computed(() => analysisError.value ? '失败' : analyzing.value ? '分析中' : analysisReport.value ? '已生成' : '待分析')
 const reportLines = computed(() => String(analysisReport.value || '').split('\n').filter(Boolean))
@@ -263,7 +258,8 @@ const uploadMyVideo = async () => {
 	}
 	analysisError.value = ''
 	analysisReport.value = ''
-	userPoseVideoUrl.value = ''
+	poseVideoUrl.value = ''
+	standardPoseVideoUrl.value = ''
 	bestMatchText.value = '等待分析'
 	distanceText.value = '相似度将在分析后显示'
 	progressText.value = '0%'
@@ -283,6 +279,7 @@ const selectStroke = (stroke) => {
 
 const ensureVideoContexts = () => {
 	if (!userVideoContext.value) userVideoContext.value = uni.createVideoContext('userVideo')
+	if (!poseVideoContext.value) poseVideoContext.value = uni.createVideoContext('poseVideo')
 }
 
 const startCompare = async () => {
@@ -294,6 +291,8 @@ const startCompare = async () => {
 	analyzing.value = true
 	analysisError.value = ''
 	analysisReport.value = '正在上传视频并进行动作分析，请稍候...'
+	poseVideoUrl.value = ''
+	standardPoseVideoUrl.value = ''
 	bestMatchText.value = `${selectedPlayer.value.name} · ${selectedStroke.value.name}`
 	distanceText.value = '请稍等'
 	progressText.value = '0%'
@@ -380,7 +379,10 @@ const applyAnalysisResult = (items) => {
 
 	const first = segments[0]
 	const annotatedVideo = findFirstValue(first, ['pose_video_url', 'annotated_video_url', 'skeleton_video_url', 'result_video_url', 'output_video_url']) || findFirstValue(summary, ['pose_video_url', 'annotated_video_url', 'skeleton_video_url', 'result_video_url', 'output_video_url'])
-	if (annotatedVideo) userPoseVideoUrl.value = normalizeMediaUrl(annotatedVideo)
+	if (annotatedVideo) poseVideoUrl.value = normalizeMediaUrl(annotatedVideo)
+	const standardAnnotatedVideo = findFirstValue(first, ['standard_pose_video_url', 'standard_annotated_video_url', 'standard_skeleton_video_url']) || findFirstValue(first.analysis || {}, ['standard_pose_video_url', 'standard_annotated_video_url'])
+	if (standardAnnotatedVideo) standardPoseVideoUrl.value = normalizeMediaUrl(standardAnnotatedVideo)
+	playbackPlan.value = buildPlaybackPlan(first, summary)
 	const analysis = first.analysis || first.dtw_analysis || first.result || {}
 	const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name', 'match_name']) || findFirstValue(first, ['best_match', 'standard', 'matched_standard']) || '职业标准动作'
 	const distance = findFirstValue(analysis, ['distance', 'dtw_distance', 'phase_dtw_distance', 'score_distance']) || findFirstValue(first, ['distance', 'dtw_distance'])
@@ -389,6 +391,7 @@ const applyAnalysisResult = (items) => {
 	bestMatchText.value = best
 	distanceText.value = distance !== undefined && distance !== null ? `相似度距离：${formatNumber(distance)}${grade ? `，评级：${grade}` : ''}` : '已完成动作匹配'
 	analysisReport.value = buildReportFromSegments(segments, summary)
+	playAnalyzedVideos()
 }
 const normalizeMediaUrl = (url) => {
 	if (!url || typeof url !== 'string') return ''
@@ -441,6 +444,46 @@ const extractProblems = (analysis, segment) => {
 		const diff = item.diff ?? item.difference ?? item.angle_diff ?? item.distance
 		return diff !== undefined && diff !== null ? `${joint} ${formatNumber(diff)}` : joint
 	})
+}
+
+const buildPlaybackPlan = (segment, summary) => {
+	const analysis = segment.analysis || {}
+	const userAnn = analysis.user_annotation || segment.user_annotation || {}
+	const standardAnn = segment.standard_annotation || analysis.standard_annotation || {}
+	return {
+		user: annotationToPlaybackRange(userAnn, summary?.fps),
+		standard: annotationToPlaybackRange(standardAnn, standardAnn?.fps || summary?.fps)
+	}
+}
+
+const annotationToPlaybackRange = (annotation, fallbackFps = 30) => {
+	const range = annotation?.segment_range
+	const fps = Number(annotation?.fps || fallbackFps || 30)
+	if (!Array.isArray(range) || range.length < 2 || !Number.isFinite(fps) || fps <= 0) {
+		return { start: 0, duration: 0 }
+	}
+	const startFrame = Number(range[0]) || 0
+	const endFrame = Number(range[1]) || startFrame
+	const start = Math.max(0, startFrame / fps)
+	const duration = Math.max(0, (endFrame - startFrame) / fps)
+	return { start, duration }
+}
+const playAnalyzedVideos = async () => {
+	await nextTick()
+	ensureVideoContexts()
+	const plan = playbackPlan.value || {}
+	const userRange = plan.user || { start: 0, duration: 0 }
+	const standardRange = plan.standard || { start: 0, duration: 0 }
+
+	if (poseVideoUrl.value) {
+		userVideoContext.value?.seek(userRange.start || 0)
+		userVideoContext.value?.play()
+	}
+	if (standardPoseVideoUrl.value) {
+		poseVideoContext.value?.seek(standardRange.start || 0)
+		poseVideoContext.value?.play()
+	}
+	playing.value = Boolean(poseVideoUrl.value || standardPoseVideoUrl.value)
 }
 
 const toggleUserPlay = () => {
@@ -726,54 +769,7 @@ const resetVideos = () => {
 	height: auto;
 }
 
-.skeleton-layer {
-	position: absolute;
-	inset: 0;
-	z-index: 4;
-	pointer-events: none;
-	opacity: .86;
-}
-
-.user-skeleton {
-	mix-blend-mode: screen;
-}
-
-.target-skeleton {
-	opacity: .26;
-}
-
-.skeleton-dot,
-.skeleton-line {
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	background: #72ffb8;
-	box-shadow: 0 0 18rpx rgba(114,255,184,.55);
-}
-
-.skeleton-dot {
-	width: 16rpx;
-	height: 16rpx;
-	border-radius: 50%;
-	transform: translate(-50%, -50%);
-}
-
-.skeleton-dot.head { top: 31%; }
-
-.skeleton-line {
-	height: 5rpx;
-	border-radius: 999rpx;
-	transform-origin: left center;
-}
-
-.skeleton-line.neck { width: 42rpx; top: 36%; transform: rotate(90deg) translateX(-50%); }
-.skeleton-line.shoulders { width: 150rpx; top: 42%; transform: translateX(-50%); }
-.skeleton-line.spine { width: 115rpx; top: 45%; transform: rotate(90deg) translateX(-50%); }
-.skeleton-line.left-arm { width: 118rpx; top: 43%; transform: translateX(-116rpx) rotate(132deg); }
-.skeleton-line.right-arm { width: 128rpx; top: 43%; transform: translateX(12rpx) rotate(36deg); }
-.skeleton-line.hips { width: 118rpx; top: 61%; transform: translateX(-50%); }
-.skeleton-line.left-leg { width: 150rpx; top: 62%; transform: translateX(-72rpx) rotate(112deg); }
-.skeleton-line.right-leg { width: 158rpx; top: 62%; transform: translateX(12rpx) rotate(68deg); }.placeholder-icon {
+.placeholder-icon {
 	width: 72rpx;
 	height: 72rpx;
 	border-radius: 18rpx;
@@ -1085,6 +1081,26 @@ const resetVideos = () => {
 	}
 }
 </style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
