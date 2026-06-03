@@ -1,8 +1,8 @@
-import time
+﻿import time
 import asyncio
 import json
 import traceback
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,7 @@ import logging
 import uuid
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,7 @@ load_dotenv()
 
 from routers.diary import router as diary_router
 from routers.rally_cut import router as rally_router
+from services.action_analysis_repository import save_action_analysis_record
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -103,7 +105,13 @@ _task_done: dict = {}
 
 
 @app.post("/api/analyze_video_submit")
-async def analyze_video_submit(file: UploadFile = File(...)):
+async def analyze_video_submit(
+    file: UploadFile = File(...),
+    user_id: int = Form(1),
+    selected_player: Optional[str] = Form(None),
+    selected_stroke: Optional[str] = Form(None),
+    source_page: str = Form("action_comparison"),
+):
     """
     提交视频，立即返回 task_id，后台异步分析
     """
@@ -115,21 +123,59 @@ async def analyze_video_submit(file: UploadFile = File(...)):
     logger.info(f"[任务提交] task_id={task_id}, 文件={file.filename}")
 
     async def run_task():
+        segments = []
+        summary = None
+        status = "success"
+        error_message = None
+
         try:
             service = await get_analysis_service()
             async for chunk in service.analyze_video_stream(video_bytes):
                 _task_items[task_id].append(chunk)
-                logger.info(f"[任务{task_id[:8]}] 新增结果: {chunk.get('type')}")
+
+                chunk_type = chunk.get("type")
+                if chunk_type == "segment":
+                    segments.append(chunk.get("data", {}))
+                elif chunk_type == "summary":
+                    summary = chunk.get("data", {})
+                elif chunk_type == "error":
+                    status = "error"
+                    error_message = chunk.get("message")
+
+                logger.info(f"[任务{task_id[:8]}] 新增结果: {chunk_type}")
         except Exception as e:
+            status = "error"
+            error_message = str(e)
             logger.error(f"[任务{task_id[:8]}] 异常: {e}")
             _task_items[task_id].append({
                 "type": "error",
                 "message": str(e)
             })
         finally:
+            metadata = {
+                "analysis_id": task_id,
+                "user_id": user_id,
+                "source_page": source_page,
+                "file_name": file.filename,
+                "selected_player": selected_player,
+                "selected_stroke": selected_stroke,
+            }
+            record_id = await asyncio.to_thread(
+                save_action_analysis_record,
+                metadata,
+                segments,
+                summary,
+                status,
+                error_message,
+            )
+            if record_id:
+                _task_items[task_id].append({
+                    "type": "record",
+                    "data": {"id": record_id, "analysis_id": task_id}
+                })
+
             _task_done[task_id] = True
             logger.info(f"[任务{task_id[:8]}] 完成，共 {len(_task_items[task_id])} 条结果")
-
     asyncio.create_task(run_task())
 
     return JSONResponse({"task_id": task_id})
@@ -364,3 +410,5 @@ if __name__ == "__main__":
         # ssl_keyfile="./key.pem",
         # ssl_certfile="./cert.pem"
     )
+
+

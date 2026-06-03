@@ -1,4 +1,4 @@
-"""
+﻿"""
 网球视频分析服务 - FastAPI 集成版
 提供异步生成器接口供 main.py 调用
 支持 YOLO 辅助的精确击球帧检测
@@ -312,3 +312,4 @@ if __name__ == "__main__":
         print("\n✅ 测试完成")
 
     asyncio.run(test())
+

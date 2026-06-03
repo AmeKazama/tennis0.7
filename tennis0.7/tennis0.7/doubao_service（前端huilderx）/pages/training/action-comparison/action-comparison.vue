@@ -49,7 +49,18 @@
 								<text class="placeholder-title">上传你的动作视频</text>
 								<text class="placeholder-text">建议使用完整单次击球片段，人物身体关键点清晰可见</text>
 							</view>
-							<view v-if="myVideo" class="skeleton-badge">AI 动作识别</view>
+							<view v-if="showUserSkeletonOverlay" class="skeleton-layer user-skeleton" pointer-events="none">
+								<view class="skeleton-dot head"></view>
+								<view class="skeleton-line neck"></view>
+								<view class="skeleton-line shoulders"></view>
+								<view class="skeleton-line spine"></view>
+								<view class="skeleton-line left-arm"></view>
+								<view class="skeleton-line right-arm"></view>
+								<view class="skeleton-line hips"></view>
+								<view class="skeleton-line left-leg"></view>
+								<view class="skeleton-line right-leg"></view>
+							</view>
+							<view v-if="myVideo" class="skeleton-badge">骨骼识别</view>
 						</view>
 					</view>
 
@@ -62,6 +73,17 @@
 							<text class="video-tag standard">对比目标</text>
 						</view>
 						<view class="standard-info-shell">
+							<view v-if="showTargetSkeletonOverlay" class="skeleton-layer target-skeleton" pointer-events="none">
+								<view class="skeleton-dot head"></view>
+								<view class="skeleton-line neck"></view>
+								<view class="skeleton-line shoulders"></view>
+								<view class="skeleton-line spine"></view>
+								<view class="skeleton-line left-arm"></view>
+								<view class="skeleton-line right-arm"></view>
+								<view class="skeleton-line hips"></view>
+								<view class="skeleton-line left-leg"></view>
+								<view class="skeleton-line right-leg"></view>
+							</view>
 							<view class="match-score">
 								<text class="match-label">当前目标</text>
 								<text class="match-main">{{ selectedPlayer.name }} · {{ selectedStroke.name }}</text>
@@ -203,6 +225,8 @@ const progressText = ref('0%')
 const taskOffset = ref(0)
 
 const displayUserVideo = computed(() => userPoseVideoUrl.value || myVideo.value?.path || '')
+const showUserSkeletonOverlay = computed(() => Boolean(myVideo.value && (analyzing.value || analysisReport.value)))
+const showTargetSkeletonOverlay = computed(() => Boolean(analyzing.value || analysisReport.value))
 const canCompare = computed(() => Boolean(myVideo.value))
 const reportStatus = computed(() => analysisError.value ? '失败' : analyzing.value ? '分析中' : analysisReport.value ? '已生成' : '待分析')
 const reportLines = computed(() => String(analysisReport.value || '').split('\n').filter(Boolean))
@@ -270,7 +294,7 @@ const startCompare = async () => {
 	analyzing.value = true
 	analysisError.value = ''
 	analysisReport.value = '正在上传视频并进行动作分析，请稍候...'
-	bestMatchText.value = '分析中'
+	bestMatchText.value = `${selectedPlayer.value.name} · ${selectedStroke.value.name}`
 	distanceText.value = '请稍等'
 	progressText.value = '0%'
 	taskOffset.value = 0
@@ -280,6 +304,7 @@ const startCompare = async () => {
 		const result = await pollAnalyzeTask(taskId)
 		applyAnalysisResult(result)
 	} catch (error) {
+		analysisReport.value = ''
 		analysisError.value = error.message || '视频分析失败'
 	} finally {
 		analyzing.value = false
@@ -290,6 +315,9 @@ const submitAnalyzeTask = async () => {
 	const formData = new FormData()
 	const userBlob = await fetch(myVideo.value.path).then((res) => res.blob())
 	formData.append('file', userBlob, myVideo.value.name || 'user_video.mp4')
+	formData.append('selected_player', selectedPlayer.value.name)
+	formData.append('selected_stroke', selectedStroke.value.id)
+	formData.append('source_page', 'training_action_comparison')
 
 	const response = await fetch(`${API_BASE_URL}/api/analyze_video_submit`, {
 		method: 'POST',
@@ -351,6 +379,8 @@ const applyAnalysisResult = (items) => {
 	}
 
 	const first = segments[0]
+	const annotatedVideo = findFirstValue(first, ['pose_video_url', 'annotated_video_url', 'skeleton_video_url', 'result_video_url', 'output_video_url']) || findFirstValue(summary, ['pose_video_url', 'annotated_video_url', 'skeleton_video_url', 'result_video_url', 'output_video_url'])
+	if (annotatedVideo) userPoseVideoUrl.value = normalizeMediaUrl(annotatedVideo)
 	const analysis = first.analysis || first.dtw_analysis || first.result || {}
 	const best = findFirstValue(analysis, ['best_match', 'standard', 'matched_standard', 'standard_name', 'match_name']) || findFirstValue(first, ['best_match', 'standard', 'matched_standard']) || '职业标准动作'
 	const distance = findFirstValue(analysis, ['distance', 'dtw_distance', 'phase_dtw_distance', 'score_distance']) || findFirstValue(first, ['distance', 'dtw_distance'])
@@ -359,6 +389,11 @@ const applyAnalysisResult = (items) => {
 	bestMatchText.value = best
 	distanceText.value = distance !== undefined && distance !== null ? `相似度距离：${formatNumber(distance)}${grade ? `，评级：${grade}` : ''}` : '已完成动作匹配'
 	analysisReport.value = buildReportFromSegments(segments, summary)
+}
+const normalizeMediaUrl = (url) => {
+	if (!url || typeof url !== 'string') return ''
+	if (/^https?:\/\//.test(url) || url.startsWith('blob:') || url.startsWith('file:')) return url
+	return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
 const findFirstValue = (source, keys) => {
@@ -655,7 +690,90 @@ const resetVideos = () => {
 	background: radial-gradient(circle at top, rgba(38,201,133,.16), #0b0e15 56%);
 }
 
-.placeholder-icon {
+
+.video-grid {
+	align-items: start;
+}
+
+.video-card {
+	display: flex;
+	flex-direction: column;
+}
+
+.video-title-row {
+	min-height: 72rpx;
+}
+
+.video-title-row > view {
+	min-width: 0;
+}
+
+.video-shell,
+.standard-info-shell {
+	box-sizing: border-box;
+	height: auto;
+	min-height: 0;
+	flex: none;
+}
+
+.video-placeholder {
+	position: absolute;
+	inset: 0;
+	height: auto;
+}
+
+.standard-info-shell {
+	height: auto;
+}
+
+.skeleton-layer {
+	position: absolute;
+	inset: 0;
+	z-index: 4;
+	pointer-events: none;
+	opacity: .86;
+}
+
+.user-skeleton {
+	mix-blend-mode: screen;
+}
+
+.target-skeleton {
+	opacity: .26;
+}
+
+.skeleton-dot,
+.skeleton-line {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	background: #72ffb8;
+	box-shadow: 0 0 18rpx rgba(114,255,184,.55);
+}
+
+.skeleton-dot {
+	width: 16rpx;
+	height: 16rpx;
+	border-radius: 50%;
+	transform: translate(-50%, -50%);
+}
+
+.skeleton-dot.head { top: 31%; }
+
+.skeleton-line {
+	height: 5rpx;
+	border-radius: 999rpx;
+	transform-origin: left center;
+}
+
+.skeleton-line.neck { width: 42rpx; top: 36%; transform: rotate(90deg) translateX(-50%); }
+.skeleton-line.shoulders { width: 150rpx; top: 42%; transform: translateX(-50%); }
+.skeleton-line.spine { width: 115rpx; top: 45%; transform: rotate(90deg) translateX(-50%); }
+.skeleton-line.left-arm { width: 118rpx; top: 43%; transform: translateX(-116rpx) rotate(132deg); }
+.skeleton-line.right-arm { width: 128rpx; top: 43%; transform: translateX(12rpx) rotate(36deg); }
+.skeleton-line.hips { width: 118rpx; top: 61%; transform: translateX(-50%); }
+.skeleton-line.left-leg { width: 150rpx; top: 62%; transform: translateX(-72rpx) rotate(112deg); }
+.skeleton-line.right-leg { width: 158rpx; top: 62%; transform: translateX(12rpx) rotate(68deg); }.placeholder-icon {
 	width: 72rpx;
 	height: 72rpx;
 	border-radius: 18rpx;
@@ -967,6 +1085,11 @@ const resetVideos = () => {
 	}
 }
 </style>
+
+
+
+
+
 
 
 
