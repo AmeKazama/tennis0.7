@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from routers.diary import router as diary_router
+from routers.moments import router as moments_router
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +46,9 @@ app = FastAPI(title="网球 AI 教练后端")
 
 # 注册日记/语音相关接口
 app.include_router(diary_router)
+
+# 注册朋友圈相关接口
+app.include_router(moments_router)
 
 # 创建上传目录并暴露静态资源
 Path("uploads/audio").mkdir(parents=True, exist_ok=True)
