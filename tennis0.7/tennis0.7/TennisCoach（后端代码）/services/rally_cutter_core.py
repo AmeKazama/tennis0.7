@@ -45,10 +45,22 @@ import subprocess
 import json
 import argparse
 import csv
+import shutil
 from pathlib import Path
 from scipy.signal import find_peaks, savgol_filter
 import torch
 import torch.nn as nn
+
+
+def get_ffmpeg_exe():
+    exe = shutil.which('ffmpeg')
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -274,6 +286,18 @@ class KalmanBallFilter:
         return float(state[0, 0]), float(state[1, 0])
 
 
+def resolve_torch_device(device: str = None) -> str:
+    device = str(device).strip() if device is not None else None
+    if not device or device == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if device in ("0", "cuda:0"):
+        device = "cuda"
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        print("[设备] CUDA 不可用，自动切换到 CPU")
+        return "cpu"
+    return device
+
+
 class BallTracker:
     """
     YOLOv8 球追踪器。
@@ -283,10 +307,11 @@ class BallTracker:
     """
     MAX_MISS = 8   # 最多连续补帧数，超过则标 None
 
-    def __init__(self, weights_path: str, device: str = 'cuda',
+    def __init__(self, weights_path: str, device: str = 'auto',
                  conf: float = 0.25, imgsz: int = 640,
                  person_weights: str = '', person_conf: float = 0.5):
         from ultralytics import YOLO
+        device = resolve_torch_device(device)
         if not os.path.exists(weights_path):
             raise FileNotFoundError(
                 f"找不到 YOLOv8 网球权重: {weights_path}\n"
@@ -760,8 +785,9 @@ _COURT_STD = np.float32([
 
 
 class CourtDetector:
-    def __init__(self, weights_path: str = '', device: str = 'cuda'):
-        self.dev    = torch.device(device if torch.cuda.is_available() else 'cpu')
+    def __init__(self, weights_path: str = '', device: str = 'auto'):
+        device = resolve_torch_device(device)
+        self.dev    = torch.device(device)
         self.H      = None
         self.iH     = None
         self.corners = None
@@ -878,7 +904,14 @@ class CourtDetector:
         self._calc_homography()
         return True
 
-    def calibrate(self, frame: np.ndarray) -> bool:
+    def set_manual_corners(self, points) -> bool:
+        if points is None or len(points) != 4:
+            return False
+        self.corners = np.float32([[float(p["x"]), float(p["y"])] for p in points])
+        self._calc_homography()
+        return True
+
+    def calibrate(self, frame: np.ndarray, allow_manual: bool = True) -> bool:
         """先尝试自动检测，失败则弹窗手动标定"""
         if self.model is not None:
             print('[CourtDetector] 尝试自动检测...')
@@ -886,6 +919,9 @@ class CourtDetector:
                 print('[CourtDetector] 自动检测成功 ✓')
                 return True
             print('[CourtDetector] 自动检测失败，切换手动标定')
+        if not allow_manual:
+            print('[CourtDetector] API 模式禁止 OpenCV 弹窗手动标定')
+            return False
         return self._manual_calibrate(frame)
 
     def _calc_homography(self):
@@ -1493,7 +1529,8 @@ def cut_video(video: str, rallies: list, outdir: str, fps: float,
 
     for i, (s, e) in enumerate(rallies):
         out_path = os.path.join(outdir, f'rally_{i+1:03d}.mp4')
-        vw = cv2.VideoWriter(out_path, fourcc, fps, (vid_w, vid_h))
+        raw_path = out_path.replace('.mp4', '_raw.mp4')
+        vw = cv2.VideoWriter(raw_path, fourcc, fps, (vid_w, vid_h))
         n_frames = e - s + 1
 
         # ── Step A：检测落点（结果用于慢速门控，不再做视觉显示）────
@@ -1582,28 +1619,40 @@ def cut_video(video: str, rallies: list, outdir: str, fps: float,
         vw.release()
 
         # ffmpeg 重编码为 H.264，确保浏览器可播放
-        h264_path = out_path.replace('.mp4', '_tmp.mp4')
-        try:
-            subprocess.run([
-                'ffmpeg', '-y', '-i', out_path,
-                '-c:v', 'libx264', '-preset', 'fast',
-                '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-                h264_path
-            ], capture_output=True, check=True)
-            os.replace(h264_path, out_path)
-        except Exception:
-            if os.path.exists(h264_path):
-                os.unlink(h264_path)
+        ffmpeg_exe = get_ffmpeg_exe()
+        if ffmpeg_exe:
+            try:
+                subprocess.run([
+                    ffmpeg_exe, '-y', '-i', raw_path,
+                    '-c:v', 'libx264', '-preset', 'fast',
+                    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+                    out_path
+                ], capture_output=True, check=True)
+                os.unlink(raw_path)
+            except Exception as exc:
+                print(f'[Cut] H.264 重编码失败，保留原始 mp4: {exc}')
+                os.replace(raw_path, out_path)
+        else:
+            print('[Cut] 未找到 ffmpeg，输出视频可能无法在浏览器播放。请安装 ffmpeg 或 imageio-ffmpeg。')
+            os.replace(raw_path, out_path)
 
         # 提取第一帧作为缩略图
         thumb_path = out_path.replace('.mp4', '.jpg')
         try:
+            if not ffmpeg_exe:
+                raise RuntimeError('ffmpeg not found')
             subprocess.run([
-                'ffmpeg', '-y', '-i', out_path,
+                ffmpeg_exe, '-y', '-i', out_path,
                 '-vframes', '1', '-q:v', '2', thumb_path
             ], capture_output=True, check=True)
         except Exception:
-            pass
+            thumb_cap = cv2.VideoCapture(out_path)
+            try:
+                ret, thumb = thumb_cap.read()
+                if ret:
+                    cv2.imwrite(thumb_path, thumb)
+            finally:
+                thumb_cap.release()
 
         ss = s / fps
         print(f'  ✅ rally_{i+1:03d}.mp4  {ss:.1f}s~{ss + (e-s)/fps:.1f}s  ({n_frames}帧)')
@@ -1637,8 +1686,8 @@ def main():
                     help='球场标定文件（自动保存/加载）')
     pa.add_argument('--recalib',        action='store_true',
                     help='强制重新标定球场')
-    pa.add_argument('--device',         default='cuda',
-                    choices=['cuda', 'cpu'])
+    pa.add_argument('--device',         default='auto',
+                    choices=['auto', 'cuda', 'cpu'])
     pa.add_argument('--margin',         type=float, default=0.0,
                     help='出界判断容差（米），默认 0.0（红线与白线重合）')
     pa.add_argument('--min_rally_sec',  type=float, default=5.0,
@@ -1780,7 +1829,7 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
                      ball_weights: str = 'weights/tennisball.pt',
                      court_weights: str = 'weights/court_detector.pth',
                      calib_path: str = 'court_calib.json',
-                     device: str = 'cuda',
+                     device: str = 'auto',
                      margin: float = 0.0,
                      bottom_margin: float = 1.0,
                      min_rally_sec: float = 5.0,
@@ -1797,7 +1846,9 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
                      net_reversal_dist: float = 4.0,
                      net_reversal_frames: int = 3,
                      viz: str = '',
-                     recalib: bool = False) -> list:
+                     recalib: bool = False,
+                     calibration_points: list = None,
+                     allow_manual_calibration: bool = True) -> list:
     """
     程序化调用切割管线，返回产出视频路径列表。
     等价于 CLI 调用 `python main.py --video xxx`。
@@ -1814,7 +1865,7 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
     a.ball_weights = ball_weights
     a.court_weights = court_weights
     a.calib = calib_path
-    a.device = device
+    a.device = resolve_torch_device(device)
     a.margin = margin
     a.bottom_margin = bottom_margin
     a.min_rally_sec = min_rally_sec
@@ -1832,6 +1883,8 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
     a.net_reversal_frames = net_reversal_frames
     a.viz = viz
     a.recalib = recalib
+    a.calibration_points = calibration_points
+    a.allow_manual_calibration = allow_manual_calibration
 
     args = a
 
@@ -1851,7 +1904,12 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
     print('\n[Step 1] 球场标定')
     court = CourtDetector(args.court_weights, args.device)
 
-    if not args.recalib and os.path.exists(args.calib):
+    if args.calibration_points:
+        if not court.set_manual_corners(args.calibration_points):
+            cap.release()
+            raise RuntimeError('前端球场标定点无效')
+        court.save(args.calib)
+    elif not args.recalib and os.path.exists(args.calib):
         court.load(args.calib)
     else:
         seek = min(90, total // 10)
@@ -1860,9 +1918,9 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
         if not ret:
             cap.release()
             raise RuntimeError('无法读取标定帧')
-        if not court.calibrate(frame):
+        if not court.calibrate(frame, allow_manual=args.allow_manual_calibration):
             cap.release()
-            raise RuntimeError('球场标定失败')
+            raise RuntimeError('NEED_CALIBRATION: 请在前端依次标记球场四个角点')
         court.save(args.calib)
 
     cap.release()

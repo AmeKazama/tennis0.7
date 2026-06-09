@@ -48,12 +48,35 @@
 						<view class="no-video-desc">请选择一个视频文件进行回合剪辑</view>
 					</view>
 				</view>
-				<view v-else
-					class="video-player-wrapper"
-					id="source-video-container"
-					:source-data="sourceVideoData"
-					:change:source-data="domVideo.renderSource"
-				></view>
+				<view v-else class="video-player-wrapper">
+					<video
+						id="sourceVideo"
+						class="source-video"
+						:src="selectedVideo.previewUrl"
+						controls
+						:autoplay="false"
+						:initial-time="0.1"
+						object-fit="contain"
+					></video>
+					<view class="calibration-layer" :class="{ complete: courtPoints.length >= 4 }" @tap.stop="handleCourtTap">
+						<view
+							v-for="(point, index) in courtPoints"
+							:key="index"
+							class="court-point"
+							:style="{ left: point.uiX + 'px', top: point.uiY + 'px' }"
+						>
+							<text class="court-point-text">{{ index + 1 }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view v-if="selectedVideo" class="calibration-card">
+				<view class="calibration-title">球场标定</view>
+				<view class="calibration-desc">{{ calibrationTip }}</view>
+				<view class="calibration-actions">
+					<view class="calibration-btn" @tap="resetCourtPoints">重新标点</view>
+				</view>
 			</view>
 
 			<!-- 操作按钮 -->
@@ -64,7 +87,7 @@
 				</view>
 				<view 
 					class="btn" 
-					:class="canSplit ? 'split-btn' : 'disabled-btn'"
+					:class="canSubmitSplit ? 'split-btn' : 'disabled-btn'"
 					@tap="startSplit"
 				>
 					<text class="btn-icon">✂</text>
@@ -78,30 +101,44 @@
 					<view class="progress-fill" :style="{ width: progress + '%' }"></view>
 				</view>
 				<text class="progress-text">{{ progress }}%</text>
+				<text class="progress-message">{{ progressMessage }}</text>
 			</view>
 
-			<!-- 分割结果：左右滑动 -->
+			<!-- 分割结果 -->
 			<view v-if="rallyList.length > 0" class="result-section">
 				<view class="result-header">
-					<text class="result-title">分割结果（{{ rallyList.length }} 个回合）</text>
+					<view>
+						<text class="result-title">分割结果</text>
+						<text class="result-subtitle">{{ rallyList.length }} 个回合片段已生成</text>
+					</view>
 				</view>
-				<scroll-view class="rally-scroll" scroll-x="true" show-scrollbar="false">
-					<view 
-						id="rally-video-container" 
-						style="display:flex;flex-direction:row;padding-bottom:12rpx;"
-						:video-data="rallyVideoData"
-						:change:video-data="domVideo.renderVideos"
-					></view>
-				</scroll-view>
+				<view class="rally-grid">
+					<view v-for="(item, index) in rallyList" :key="item.url" class="rally-card">
+						<view class="rally-card-head">
+							<text class="rally-title">回合 {{ index + 1 }}</text>
+							<text class="rally-index">{{ String(index + 1).padStart(2, '0') }}</text>
+						</view>
+						<video
+							class="rally-video"
+							:src="item.url"
+							:poster="item.poster || ''"
+							controls
+							:autoplay="false"
+							:initial-time="0.1"
+							object-fit="contain"
+							@error="handleRallyVideoError(item)"
+						></video>
+					</view>
+				</view>
 			</view>
 
 			<!-- 提示信息 -->
 			<view v-if="rallyList.length === 0 && !cutting" class="tip-card">
 				<view class="tip-header">
-					<text class="tip-title">把时间留给球场，算给 AI 。</text>
+					<text class="tip-title">{{ emptyMessage ? '暂未生成回合片段' : '把时间留给球场，算给 AI 。' }}</text>
 				</view>
 				<view class="tip-content">
-					<text class="tip-desc">选择视频后点击「分割」，自动识别回合边界并拆分。</text>
+					<text class="tip-desc">{{ emptyMessage || '选择视频后点击「分割」，自动识别回合边界并拆分。' }}</text>
 				</view>
 			</view>
 		</view>
@@ -112,7 +149,17 @@
 import { ref, computed } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
 
-const API_BASE_URL = 'http://192.168.1.53:9000'
+const LAN_API_BASE_URL = 'http://192.168.1.53:9000'
+const getApiBaseUrl = () => {
+	// #ifdef H5
+	const host = window.location.hostname
+	if (host === 'localhost' || host === '127.0.0.1') {
+		return 'http://localhost:9000'
+	}
+	// #endif
+	return LAN_API_BASE_URL
+}
+const API_BASE_URL = getApiBaseUrl()
 
 const toWebUrl = (path) => {
 	if (!path) return path
@@ -126,15 +173,23 @@ const toWebUrl = (path) => {
 }
 
 const currentTab = ref('full')
-const selectedVideo = ref('')
+const selectedVideo = ref(null)
 const cutting = ref(false)
 const progress = ref(0)
+const progressMessage = ref('')
 const taskId = ref('')
 const rallyList = ref([])
+const courtPoints = ref([])
+const pollAttempts = ref(0)
+const emptyMessage = ref('')
 
 const canSplit = computed(() => selectedVideo.value && !cutting.value)
-const sourceVideoData = computed(() => selectedVideo.value ? JSON.stringify([{ url: selectedVideo.value }]) : '')
-const rallyVideoData = computed(() => JSON.stringify(rallyList.value.map(r => ({ url: r.url, poster: r.poster || '' }))))
+const canSubmitSplit = computed(() => selectedVideo.value && courtPoints.value.length === 4 && !cutting.value)
+const courtPointLabels = ['左上角', '右上角', '左下角', '右下角']
+const calibrationTip = computed(() => {
+	if (courtPoints.value.length >= 4) return '标定完成，可以开始剪辑。'
+	return `请点击球场${courtPointLabels[courtPoints.value.length]}（${courtPoints.value.length + 1}/4）`
+})
 
 const goBack = () => {
 	uni.navigateBack()
@@ -149,78 +204,233 @@ const selectVideo = () => {
 		sourceType: ['album'],
 		compressed: true,
 		success: (res) => {
-			selectedVideo.value = toWebUrl(res.tempFilePath)
+			selectedVideo.value = {
+				rawPath: res.tempFilePath,
+				previewUrl: toWebUrl(res.tempFilePath),
+				file: res.tempFile || res.tempFiles?.[0]?.file || res.tempFiles?.[0],
+				name: res.name || res.tempFiles?.[0]?.name || 'rally_video.mp4',
+				width: Number(res.width || 0),
+				height: Number(res.height || 0)
+			}
+			courtPoints.value = []
 			rallyList.value = []
+			emptyMessage.value = ''
 			uni.showToast({ title: '视频已选择', icon: 'success' })
 		}
 	})
 }
 
-const downloadRallyVideos = (files) => {
-	const tasks = files.map(f => {
-		const filename = f.replace(/\\/g, '/').split('/').pop()
-		const videoUrl = `${API_BASE_URL}/output_rallies/${filename}`
-		const posterUrl = videoUrl.replace('.mp4', '.jpg')
-		return new Promise((resolve, reject) => {
-			uni.downloadFile({
-				url: videoUrl,
-				success: (res) => resolve({ url: toWebUrl(res.tempFilePath), poster: posterUrl }),
-				fail: reject
-			})
-		})
-	})
-	Promise.all(tasks).then(items => {
-		rallyList.value = items
-		uni.hideLoading()
-		uni.showToast({ title: `分割完成，共 ${files.length} 个回合`, icon: 'success' })
-	}).catch(() => {
-		rallyList.value = files.map(f => {
-			const filename = f.replace(/\\/g, '/').split('/').pop()
-			const videoUrl = `${API_BASE_URL}/output_rallies/${filename}`
-			return { url: videoUrl, poster: videoUrl.replace('.mp4', '.jpg') }
-		})
-		uni.hideLoading()
-		uni.showToast({ title: `分割完成（网络播放）`, icon: 'success' })
-	}).finally(() => {
-		cutting.value = false
-	})
+const getManualPointsPayload = () => {
+	return JSON.stringify(courtPoints.value.map(({ x, y }) => ({ x, y })))
 }
 
-const startSplit = () => {
-	if (!canSplit.value) return
-	cutting.value = true
-	progress.value = 5
-	rallyList.value = []
+const normalizeVideoFile = (fileLike) => {
+	if (!fileLike) return null
+	if (typeof Blob !== 'undefined' && fileLike instanceof Blob) return fileLike
+	if (fileLike.file && typeof Blob !== 'undefined' && fileLike.file instanceof Blob) return fileLike.file
+	if (fileLike.raw && typeof Blob !== 'undefined' && fileLike.raw instanceof Blob) return fileLike.raw
+	return null
+}
 
-	uni.showLoading({ title: '上传中...' })
+const handleSubmitSuccess = (data) => {
+	if (!data.task_id) {
+		cutting.value = false
+		progress.value = 0
+		progressMessage.value = ''
+		uni.showToast({ title: data.detail || data.message || '任务创建失败', icon: 'none' })
+		return
+	}
+	taskId.value = data.task_id
+	progress.value = Math.max(progress.value, 10)
+	progressMessage.value = '任务已创建，等待后端处理'
+	pollStatus(data.task_id)
+}
+
+const submitByFetch = async () => {
+	let blob = normalizeVideoFile(selectedVideo.value.file)
+	if (!blob) {
+		const response = await fetch(selectedVideo.value.rawPath)
+		if (!response.ok) throw new Error('无法读取浏览器临时视频文件')
+		blob = await response.blob()
+	}
+
+	const formData = new FormData()
+	formData.append('file', blob, selectedVideo.value.name || 'rally_video.mp4')
+	formData.append('manual_points', getManualPointsPayload())
+
+	const response = await fetch(`${API_BASE_URL}/api/rally/cut/submit?no_net=true&slow_speed=5&net_reversal_dist=4&min_rally_sec=1`, {
+		method: 'POST',
+		body: formData
+	})
+
+	let data = {}
+	try {
+		data = await response.json()
+	} catch (e) {
+		data = {}
+	}
+
+	if (!response.ok) {
+		throw new Error(data.detail || data.message || `上传失败：${response.status}`)
+	}
+
+	handleSubmitSuccess(data)
+}
+
+const submitByUniUpload = () => {
 	const task = uni.uploadFile({
-		url: `${API_BASE_URL}/api/rally/cut/submit?no_net=true&slow_speed=5&net_reversal_dist=4`,
-		filePath: selectedVideo.value,
+		url: `${API_BASE_URL}/api/rally/cut/submit?no_net=true&slow_speed=5&net_reversal_dist=4&min_rally_sec=1`,
+		filePath: selectedVideo.value.rawPath,
 		name: 'file',
+		formData: {
+			manual_points: getManualPointsPayload()
+		},
 		timeout: 600000,
 		success: (res) => {
 			uni.hideLoading()
 			const data = JSON.parse(res.data)
-			taskId.value = data.task_id
-			progress.value = 10
-			pollStatus(data.task_id)
+			handleSubmitSuccess(data)
 		},
 		fail: (err) => {
 			uni.hideLoading()
 			cutting.value = false
 			progress.value = 0
+			progressMessage.value = ''
 			uni.showToast({ title: '上传失败', icon: 'none' })
 		}
 	})
 	if (task && task.onProgressUpdate) {
 		task.onProgressUpdate((res) => {
 			progress.value = Math.min(90, 5 + Math.floor(res.progress * 0.85))
+			progressMessage.value = '正在上传视频'
 		})
 	}
 }
 
+const resetCourtPoints = () => {
+	courtPoints.value = []
+}
+
+const getTapPoint = (event) => {
+	const touch = event.changedTouches?.[0] || event.touches?.[0]
+	return {
+		clientX: touch?.clientX ?? event.detail?.x ?? 0,
+		clientY: touch?.clientY ?? event.detail?.y ?? 0
+	}
+}
+
+const mapTapToVideoPoint = (rect, tap) => {
+	const videoWidth = selectedVideo.value?.width || rect.width
+	const videoHeight = selectedVideo.value?.height || rect.height
+	const boxRatio = rect.width / rect.height
+	const videoRatio = videoWidth / videoHeight
+
+	let displayWidth = rect.width
+	let displayHeight = rect.height
+	let offsetX = 0
+	let offsetY = 0
+
+	if (videoRatio > boxRatio) {
+		displayHeight = rect.width / videoRatio
+		offsetY = (rect.height - displayHeight) / 2
+	} else {
+		displayWidth = rect.height * videoRatio
+		offsetX = (rect.width - displayWidth) / 2
+	}
+
+	const localX = tap.clientX - rect.left - offsetX
+	const localY = tap.clientY - rect.top - offsetY
+	if (localX < 0 || localY < 0 || localX > displayWidth || localY > displayHeight) {
+		return null
+	}
+
+	return {
+		x: Math.round((localX / displayWidth) * videoWidth),
+		y: Math.round((localY / displayHeight) * videoHeight),
+		uiX: Math.round(localX + offsetX),
+		uiY: Math.round(localY + offsetY)
+	}
+}
+
+const handleCourtTap = (event) => {
+	if (!selectedVideo.value || cutting.value || courtPoints.value.length >= 4) return
+	const tap = getTapPoint(event)
+	uni.createSelectorQuery()
+		.select('.video-player-wrapper')
+		.boundingClientRect((rect) => {
+			if (!rect) return
+			const point = mapTapToVideoPoint(rect, tap)
+			if (!point) {
+				uni.showToast({ title: '请点击视频画面内', icon: 'none' })
+				return
+			}
+			courtPoints.value.push(point)
+		})
+		.exec()
+}
+
+const downloadRallyVideos = (files) => {
+	rallyList.value = files.map((f, index) => {
+		const relativePath = f.replace(/\\/g, '/').replace(/^\/+/, '')
+		const videoUrl = `${API_BASE_URL}/output_rallies/${relativePath}`
+		return {
+			id: `${relativePath}-${index}`,
+			url: videoUrl,
+			poster: ''
+		}
+	})
+	uni.hideLoading()
+	cutting.value = false
+	uni.showToast({ title: `分割完成，共 ${files.length} 个回合`, icon: 'success' })
+}
+
+const handleRallyVideoError = (item) => {
+	console.warn('回合视频播放失败', item.url)
+	uni.showToast({ title: '片段加载失败，请检查后端视频地址', icon: 'none' })
+}
+
+const startSplit = () => {
+	if (!selectedVideo.value || cutting.value) return
+	if (courtPoints.value.length !== 4) {
+		uni.showToast({ title: '请先完成球场四点标定', icon: 'none' })
+		return
+	}
+	cutting.value = true
+	progress.value = 5
+	progressMessage.value = '正在上传视频'
+	rallyList.value = []
+	emptyMessage.value = ''
+	pollAttempts.value = 0
+
+	uni.showLoading({ title: '上传中...' })
+	// #ifdef H5
+	submitByFetch()
+		.then(() => {
+			uni.hideLoading()
+		})
+		.catch((error) => {
+			uni.hideLoading()
+			cutting.value = false
+			progress.value = 0
+			uni.showToast({ title: error.message || '上传失败', icon: 'none' })
+		})
+	// #endif
+
+	// #ifndef H5
+	submitByUniUpload()
+	// #endif
+}
+
 const pollStatus = (tid) => {
 	setTimeout(() => {
+		pollAttempts.value += 1
+		if (pollAttempts.value > 180) {
+			cutting.value = false
+			progress.value = 0
+			progressMessage.value = ''
+			uni.showToast({ title: '分割超时，请重试', icon: 'none' })
+			return
+		}
 		uni.request({
 			url: `${API_BASE_URL}/api/rally/cut/status/${tid}`,
 			method: 'GET',
@@ -228,14 +438,26 @@ const pollStatus = (tid) => {
 				const data = res.data
 				if (data.status === 'running') {
 					progress.value = Math.max(progress.value, data.progress || 30)
+					progressMessage.value = data.message || '正在处理视频'
 					pollStatus(tid)
 				} else if (data.status === 'done') {
 					progress.value = 100
+					progressMessage.value = data.message || '分割完成'
 					const files = data.result?.files || []
+					if (files.length === 0) {
+						cutting.value = false
+						progress.value = 0
+						progressMessage.value = ''
+						emptyMessage.value = data.result?.message || '没有识别到满足条件的回合片段，请重新标定球场角点或换一段更完整的视频。'
+						uni.hideLoading()
+						uni.showToast({ title: '未生成回合片段', icon: 'none' })
+						return
+					}
 					downloadRallyVideos(files)
 				} else if (data.status === 'error') {
 					cutting.value = false
 					progress.value = 0
+					progressMessage.value = ''
 					uni.showToast({ title: '分割失败: ' + (data.error || '未知错误'), icon: 'none' })
 				} else {
 					pollStatus(tid)
@@ -405,6 +627,81 @@ const pollStatus = (tid) => {
 	position: relative;
 }
 
+.source-video {
+	width: 100%;
+	height: 100%;
+	background: #000000;
+	display: block;
+}
+
+.calibration-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 2;
+}
+
+.calibration-layer.complete {
+	pointer-events: none;
+}
+
+.court-point {
+	position: absolute;
+	width: 44rpx;
+	height: 44rpx;
+	margin-left: -22rpx;
+	margin-top: -22rpx;
+	border-radius: 50%;
+	background: var(--primary-green);
+	border: 4rpx solid #000000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 0 20rpx rgba(222, 255, 154, 0.65);
+}
+
+.court-point-text {
+	font-size: 22rpx;
+	color: #000000;
+	font-weight: 800;
+}
+
+.calibration-card {
+	margin-bottom: 28rpx;
+	padding: 22rpx;
+	border-radius: 20rpx;
+	background: rgba(222, 255, 154, 0.08);
+	border: 1rpx solid rgba(222, 255, 154, 0.2);
+}
+
+.calibration-title {
+	font-size: 28rpx;
+	color: var(--primary-green);
+	font-weight: 700;
+	margin-bottom: 8rpx;
+}
+
+.calibration-desc {
+	font-size: 24rpx;
+	color: rgba(255, 255, 255, 0.76);
+	line-height: 1.5;
+}
+
+.calibration-actions {
+	display: flex;
+	margin-top: 16rpx;
+}
+
+.calibration-btn {
+	padding: 12rpx 22rpx;
+	border-radius: 14rpx;
+	background: rgba(255, 255, 255, 0.08);
+	color: #ffffff;
+	font-size: 24rpx;
+}
+
 .btn {
 	flex: 1;
 	display: flex;
@@ -455,6 +752,7 @@ const pollStatus = (tid) => {
 .progress-bar-wrap {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: 16rpx;
 	margin-bottom: 24rpx;
 }
@@ -481,28 +779,76 @@ const pollStatus = (tid) => {
 	text-align: right;
 }
 
+.progress-message {
+	width: 100%;
+	font-size: 22rpx;
+	color: rgba(255, 255, 255, 0.55);
+	line-height: 1.5;
+}
+
 .result-section {
-	margin-bottom: 28rpx;
+	margin: 10rpx 0 32rpx;
 }
 
 .result-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 20rpx;
+	margin-bottom: 18rpx;
 }
 
 .result-title {
-	font-size: 28rpx;
-	font-weight: 600;
+	display: block;
+	font-size: 30rpx;
+	font-weight: 800;
 	color: #ffffff;
 }
 
-.rally-scroll {
+.result-subtitle {
+	display: block;
+	margin-top: 6rpx;
+	font-size: 22rpx;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.rally-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 18rpx;
+}
+
+.rally-card {
+	overflow: hidden;
+	border-radius: 14rpx;
+	background: #121610;
+	border: 1rpx solid rgba(222, 255, 154, 0.16);
+}
+
+.rally-card-head {
+	height: 64rpx;
+	padding: 0 18rpx;
 	display: flex;
-	flex-direction: row;
-	white-space: nowrap;
-	padding-bottom: 12rpx;
+	align-items: center;
+	justify-content: space-between;
+	background: rgba(222, 255, 154, 0.07);
+}
+
+.rally-title {
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #deff9a;
+}
+
+.rally-index {
+	font-size: 20rpx;
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.rally-video {
+	display: block;
+	width: 100%;
+	height: 260rpx;
+	background: #000000;
 }
 
 .tip-card {
@@ -530,6 +876,110 @@ const pollStatus = (tid) => {
 	font-size: 24rpx;
 	color: rgba(255, 255, 255, 0.7);
 	line-height: 1.6;
+}
+
+@media (min-width: 900px) {
+	.container {
+		max-width: 1040px;
+		margin: 0 auto;
+		padding: 24px 28px 110px;
+		box-sizing: border-box;
+	}
+
+	.header {
+		margin-bottom: 18px;
+	}
+
+	.page-title {
+		font-size: 24px;
+	}
+
+	.tab-container {
+		margin-bottom: 20px;
+		gap: 28px;
+	}
+
+	.tab-text {
+		font-size: 16px;
+	}
+
+	.video-player-wrapper,
+	.video-frame {
+		height: 420px;
+		border-radius: 12px;
+	}
+
+	.calibration-card {
+		margin-bottom: 18px;
+		padding: 14px 16px;
+		border-radius: 10px;
+	}
+
+	.calibration-title {
+		font-size: 16px;
+	}
+
+	.calibration-desc,
+	.calibration-btn {
+		font-size: 14px;
+	}
+
+	.action-buttons {
+		gap: 14px;
+		margin-bottom: 18px;
+	}
+
+	.btn {
+		height: 54px;
+		padding: 0;
+		border-radius: 10px;
+	}
+
+	.btn-text {
+		font-size: 16px;
+	}
+
+	.btn-icon {
+		font-size: 18px;
+	}
+
+	.result-header {
+		margin-bottom: 12px;
+	}
+
+	.result-title {
+		font-size: 20px;
+	}
+
+	.result-subtitle {
+		font-size: 13px;
+	}
+
+	.rally-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 14px;
+	}
+
+	.rally-card {
+		border-radius: 10px;
+	}
+
+	.rally-card-head {
+		height: 42px;
+		padding: 0 12px;
+	}
+
+	.rally-title {
+		font-size: 14px;
+	}
+
+	.rally-index {
+		font-size: 12px;
+	}
+
+	.rally-video {
+		height: 180px;
+	}
 }
 </style>
 

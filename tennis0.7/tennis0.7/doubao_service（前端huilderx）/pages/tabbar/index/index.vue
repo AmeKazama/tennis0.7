@@ -94,6 +94,77 @@ const currentVideoData = computed(() => JSON.stringify({
 	poster: currentVideo.value.poster || ''
 }))
 
+const LAN_FEED_API_BASE_URL = 'http://192.168.1.53:9000'
+const getFeedApiBaseUrl = () => {
+	// #ifdef H5
+	const host = window.location.hostname
+	if (host === 'localhost' || host === '127.0.0.1') {
+		return 'http://127.0.0.1:9000'
+	}
+	// #endif
+	return LAN_FEED_API_BASE_URL
+}
+const FEED_API_BASE_URL = getFeedApiBaseUrl()
+const fallbackVideoList = [
+	{
+		id: 'demo_1',
+		userId: 'u1',
+		videoUrl: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+		poster: '/static/media/bessi-tennis-1381230.jpg',
+		avatar: 'https://i.pravatar.cc/150?u=1',
+		author: '@TennisCoach_1',
+		desc: '演示视频：后端视频流服务不可用时的兜底播放内容。',
+		music: 'Original Sound - Tennis',
+		likes: 125000,
+		comments: 4567,
+		shares: 890,
+		isLiked: false,
+		isFollowed: false,
+		isCollected: false
+	},
+	{
+		id: 'demo_2',
+		userId: 'u2',
+		videoUrl: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
+		poster: '/static/media/dietmaha-tennis-251907_1920.jpg',
+		avatar: 'https://i.pravatar.cc/150?u=2',
+		author: '@TennisCoach_2',
+		desc: '演示视频：用于验证前端播放器、滑动切换和互动按钮。',
+		music: 'Training Beat',
+		likes: 89500,
+		comments: 3456,
+		shares: 567,
+		isLiked: false,
+		isFollowed: false,
+		isCollected: false
+	},
+	{
+		id: 'demo_3',
+		userId: 'u3',
+		videoUrl: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
+		poster: '/static/media/felix1999-tennis-ball-4716315_1920.jpg',
+		avatar: 'https://i.pravatar.cc/150?u=3',
+		author: '@TennisCoach_3',
+		desc: '演示视频：真实 feed/list 接口接好后会自动替换这些数据。',
+		music: 'Court Vision',
+		likes: 234000,
+		comments: 6789,
+		shares: 1234,
+		isLiked: false,
+		isFollowed: false,
+		isCollected: false
+	}
+]
+
+const setVideoList = (list) => {
+	mockDataList.length = 0
+	list.forEach((item) => {
+		mockDataList.push(item)
+	})
+	currentVideoIndex.value = 0
+	refreshSocialState()
+}
+
 const switchVideo = (dir) => {
 	const len = mockDataList.length
 	if (len === 0) return
@@ -240,20 +311,18 @@ const fetchVideoList = async () => {
 	try {
 		const res = await uni.request({
 			// 把这里改成你电脑的局域网 IP！！
-			url: "http://10.24.51.159:8003/api/feed/list", 
+			url: `${FEED_API_BASE_URL}/api/feed/list`, 
 			method: "GET",
 			data: { page: 1, page_size: 5 }
 		})
 
 		// 👇 只改了这里！！！ res.data 而不是 res[1].data
-		if (res.data.code === 200) {
-			mockDataList.length = 0 
-			res.data.data.forEach(item => {
-				mockDataList.push({
+		if (res.data && res.data.code === 200 && Array.isArray(res.data.data) && res.data.data.length > 0) {
+			setVideoList(res.data.data.map(item => ({
 					id: 'feed_' + item.id,
 					userId: 'u' + item.id,
-					videoUrl: "http://10.24.51.159:8003" + item.video_url,
-					poster: "http://10.24.51.159:8003" + item.cover_url,
+					videoUrl: FEED_API_BASE_URL + item.video_url,
+					poster: FEED_API_BASE_URL + item.cover_url,
 					avatar: "https://i.pravatar.cc/150?u=" + item.id,
 					author: '@TennisCoach_' + item.id,
 					desc: item.desc,
@@ -264,11 +333,13 @@ const fetchVideoList = async () => {
 					isLiked: false,
 					isFollowed: false,
 					isCollected: false
-				})
-			})
+				})))
+		} else {
+			setVideoList(fallbackVideoList)
 		}
 	} catch (e) {
-		console.error("请求视频失败", e)
+		console.warn("视频流服务不可用，使用演示视频", e)
+		setVideoList(fallbackVideoList)
 	}
 }
 

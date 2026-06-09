@@ -1,5 +1,6 @@
 import json
 import math
+import os
 from pathlib import Path
 
 ANGLE_KEYS = [
@@ -72,6 +73,28 @@ def load_phase_library(library_dir=None, shot_type=None):
     return entries
 
 
+def find_pose_landmarker_model():
+    env_path = os.getenv("MEDIAPIPE_POSE_MODEL")
+    candidates = []
+    if env_path:
+        candidates.append(Path(env_path))
+
+    base_dir = Path(__file__).resolve().parent.parent
+    candidates.extend([
+        base_dir / "models" / "pose_landmarker_lite.task",
+        base_dir / "models" / "pose_landmarker_full.task",
+        base_dir / "weights" / "pose_landmarker_lite.task",
+        base_dir / "weights" / "pose_landmarker_full.task",
+        base_dir / "services" / "pose_landmarker_lite.task",
+        base_dir / "pose_landmarker_lite.task",
+    ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_frame=None):
     """Convert one uploaded-user shot window into the serve00x_final.json shape."""
     try:
@@ -97,7 +120,37 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
 
     fps = round(cap.get(cv2.CAP_PROP_FPS) or 30.0, 2)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    pose = mp.solutions.pose.Pose(model_complexity=1, min_detection_confidence=0.5)
+    pose = None
+
+    if hasattr(mp, "solutions"):
+        pose = mp.solutions.pose.Pose(model_complexity=1, min_detection_confidence=0.5)
+        use_tasks_api = False
+    else:
+        model_path = find_pose_landmarker_model()
+        if model_path is None:
+            print(
+                "[phase_dtw] mediapipe.tasks needs pose_landmarker_lite.task; "
+                "skip phase annotation."
+            )
+            cap.release()
+            return None
+
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision
+
+        # Pass model bytes instead of a filesystem path. MediaPipe's native
+        # layer can fail to open non-ASCII Windows paths.
+        base_options = mp_python.BaseOptions(model_asset_buffer=model_path.read_bytes())
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+            min_pose_presence_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+        pose = vision.PoseLandmarker.create_from_options(options)
+        use_tasks_api = True
 
     def calc_angle(a, b, c):
         a, b, c = np.array(a), np.array(b), np.array(c)
@@ -115,10 +168,18 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
             continue
         h, w, _ = frame.shape
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = pose.process(rgb)
-        if not result.pose_landmarks:
-            continue
-        lm = result.pose_landmarks.landmark
+        if use_tasks_api:
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            timestamp_ms = int(fid * 1000 / fps)
+            result = pose.detect_for_video(image, timestamp_ms)
+            if not result.pose_landmarks:
+                continue
+            lm = result.pose_landmarks[0]
+        else:
+            result = pose.process(rgb)
+            if not result.pose_landmarks:
+                continue
+            lm = result.pose_landmarks.landmark
         pt = lambda i: np.array([lm[i].x * w, lm[i].y * h])
         ms = (pt(11) + pt(12)) / 2
         mh = (pt(23) + pt(24)) / 2

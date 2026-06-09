@@ -18,7 +18,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from routers.diary import router as diary_router
+from routers.feed import register_feed_static, router as feed_router
 from routers.rally_cut import router as rally_router
+from routers.tts import register_tts_static, router as tts_router
 from services.action_analysis_repository import save_action_analysis_record
 
 # 配置日志
@@ -64,6 +66,7 @@ async def options_preflight(full_path: str):
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
             "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Private-Network": "true",
         },
     )
 
@@ -72,12 +75,18 @@ async def options_preflight(full_path: str):
 app.include_router(diary_router)
 # 注册回合切割接口
 app.include_router(rally_router)
+# 注册首页视频流接口
+app.include_router(feed_router)
+# 注册文字转语音接口
+app.include_router(tts_router)
 
 # 创建目录并暴露静态资源
 Path("uploads/audio").mkdir(parents=True, exist_ok=True)
 Path("output_rallies").mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/output_rallies", StaticFiles(directory="output_rallies"), name="output_rallies")
+register_feed_static(app)
+register_tts_static(app)
 
 
 # 全局配置

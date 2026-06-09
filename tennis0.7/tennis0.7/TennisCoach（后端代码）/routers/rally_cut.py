@@ -3,11 +3,12 @@
 接受前端视频 → 后台切割 → 返回片段文件列表
 """
 
+import json
 import logging
 import asyncio
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, File, UploadFile, HTTPException, Query, Form
 from fastapi.responses import JSONResponse
 
 from services.rally_cut_service import get_rally_cut_service
@@ -19,10 +20,12 @@ router = APIRouter(prefix="/api/rally", tags=["rally"])
 @router.post("/cut/submit")
 async def submit_cut(
     file: UploadFile = File(...),
+    manual_points: str | None = Form(None),
     slow_speed: float = Query(3.0, description="慢速速度阈值"),
     no_slow: bool = Query(False, description="关闭慢速检测"),
     no_net: bool = Query(False, description="关闭触网检测"),
     net_reversal_dist: float = Query(4.0, description="触网检测范围（米）"),
+    min_rally_sec: float = Query(1.0, description="最短回合时长（秒）"),
 ):
     """
     提交视频切割任务，立即返回 task_id。
@@ -35,13 +38,27 @@ async def submit_cut(
 
         logger.info(f"[切割提交] 文件={file.filename}, 大小={len(video_bytes)} bytes")
 
+        calibration_points = None
+        if manual_points:
+            try:
+                calibration_points = json.loads(manual_points)
+                if not isinstance(calibration_points, list) or len(calibration_points) != 4:
+                    raise ValueError("manual_points must contain four points")
+                for point in calibration_points:
+                    if not isinstance(point, dict) or "x" not in point or "y" not in point:
+                        raise ValueError("each point must include x and y")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"标定点格式错误: {exc}") from exc
+
         service = await get_rally_cut_service()
         task_id = await service.submit_cut(
             video_bytes=video_bytes,
+            calibration_points=calibration_points,
             slow_speed=slow_speed,
             no_slow=no_slow,
             no_net=no_net,
             net_reversal_dist=net_reversal_dist,
+            min_rally_sec=min_rally_sec,
         )
 
         return {"task_id": task_id, "status": "submitted"}
