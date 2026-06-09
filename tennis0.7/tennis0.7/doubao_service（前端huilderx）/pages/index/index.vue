@@ -375,7 +375,7 @@ export default {
 		},
 		goToDiary() {
 			uni.navigateTo({
-				url: '/pages/diary/diary'
+				url: '/pages/content/diary/diary'
 			})
 		},
 		goToAICoachSelect() {

@@ -135,7 +135,7 @@ ws://192.168.1.53:9000/ws/joints
 doubao_service（前端huilderx）/pages/ai-coach/coach-test/coach-test.vue
 doubao_service（前端huilderx）/pages/coach-test/coach-test.vue
 doubao_service（前端huilderx）/pages/training/highlight-edit/highlight-edit.vue
-doubao_service（前端huilderx）/pages/diary/diary.vue
+doubao_service（前端huilderx）/pages/content/diary/diary.vue
 ```
 
 如果换电脑或换 Wi-Fi，请先执行：

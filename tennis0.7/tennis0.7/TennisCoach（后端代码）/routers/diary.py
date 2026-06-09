@@ -24,13 +24,17 @@ async def list_diaries(
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
-    diaries = (
-        db.query(BallDiary)
-        .filter(BallDiary.user_id == user_id)
-        .order_by(BallDiary.create_time.desc())
-        .limit(limit)
-        .all()
-    )
+    try:
+        diaries = (
+            db.query(BallDiary)
+            .filter(BallDiary.user_id == user_id)
+            .order_by(BallDiary.create_time.desc())
+            .limit(limit)
+            .all()
+        )
+    except Exception as exc:
+        logger.exception("List diary failed, userId=%s", user_id)
+        return error(f"日记列表查询失败：{exc}", code=400)
 
     return success(
         message="查询成功",
