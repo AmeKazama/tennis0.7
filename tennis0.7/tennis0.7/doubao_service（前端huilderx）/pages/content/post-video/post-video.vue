@@ -34,11 +34,13 @@
 						mode="aspectFill"
 					></image>
 					<video
-						v-else
-						class="media-preview"
-						:src="selectedMedia.path"
-						:controls="true"
-						object-fit="cover"
+					  v-else
+					  class="media-preview"
+					  :src="selectedMedia.path"
+					  controls
+					  muted
+					  preload="auto"
+					  @error="videoErr"
 					></video>
 					<view class="preview-actions">
 						<text class="media-type">{{ selectedMedia.type === 'image' ? '图片' : '视频' }}</text>
@@ -105,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
 import { addCommunityPost, saveLocalFile } from '@/utils/community-posts/index.js'
 
@@ -121,6 +123,26 @@ const goBack = () => {
 	uni.navigateBack()
 }
 
+// 替换为视频专用API，彻底解决模拟器不回调、无响应问题
+const chooseVideo = () => {
+  console.log("📹 开始选择视频");
+  uni.chooseVideo({
+    sourceType: ['album'], // 从相册选
+    compressed: false, // 不压缩
+    success: (res) => {
+      console.log("✅ 视频选择成功", res.tempFilePath);
+      // 赋值，直接显示预览
+      selectedMedia.value = {
+        type: 'video',
+        path: res.tempFilePath
+      };
+    },
+    fail: (err) => {
+      console.error("❌ 选择视频失败", err);
+    }
+  });
+}
+
 const chooseImage = () => {
 	uni.chooseImage({
 		count: 1,
@@ -129,26 +151,12 @@ const chooseImage = () => {
 		success: (res) => {
 			selectedMedia.value = {
 				type: 'image',
-				path: res.tempFilePaths?.[0] || ''
+				path: res.tempFilePaths[0]
 			}
+			console.log("图片路径：", res.tempFilePaths[0])
 		}
 	})
 }
-
-const chooseVideo = () => {
-	uni.chooseVideo({
-		sourceType: ['album', 'camera'],
-		compressed: true,
-		maxDuration: 60,
-		success: (res) => {
-			selectedMedia.value = {
-				type: 'video',
-				path: res.tempFilePath || ''
-			}
-		}
-	})
-}
-
 const selectMedia = () => {
 	uni.showActionSheet({
 		itemList: ['选择图片', '选择视频'],
@@ -162,41 +170,69 @@ const selectMedia = () => {
 	})
 }
 
+// 替换你现在的 publishPost 函数
 const publishPost = async () => {
-	if (!selectedMedia.value.path) {
-		uni.showToast({
-			title: '请先选择图片或视频',
-			icon: 'none'
-		})
-		return
-	}
+  if (!selectedMedia.value.path) {
+    uni.showToast({ title: '请先选择图片或视频', icon: 'none' })
+    return
+  }
 
-	uni.showLoading({
-		title: '发布中...'
-	})
+  uni.showLoading({ title: '发布中...' })
 
-	const savedPath = await saveLocalFile(selectedMedia.value.path)
-	addCommunityPost({
-		type: selectedMedia.value.type,
-		src: savedPath,
-		text: textContent.value || '分享一次新的网球训练',
-		tags: suggestedTags.filter((tag) => textContent.value.includes(tag)),
-		likes: 0,
-		comments: 0
-	})
+  try {
+    const isVideo = selectedMedia.value.type === 'video'
+    const uploadUrl = isVideo
+      ? 'http://10.24.57.203:8003/api/feed/upload'
+      : 'http://10.24.57.203:8003/api/feed/upload-cover'
 
-	uni.hideLoading()
-	uni.showToast({
-		title: '发布成功',
-		icon: 'success'
-	})
+    // 上传逻辑和你之前成功的版本完全一致
+    const uploadResult = await new Promise((resolve, reject) => {
+      uni.uploadFile({
+        url: uploadUrl,
+        filePath: selectedMedia.value.path,
+        name: isVideo ? 'video' : 'file',
+        timeout: 60000,
+        success: (res) => {
+          try {
+            const data = JSON.parse(res.data)
+            resolve(data)
+          } catch (e) {
+            reject(e)
+          }
+        },
+        fail: reject
+      })
+    })
 
-	setTimeout(() => {
-		uni.switchTab({
-			url: '/pages/tabbar/profile/profile',
-			fail: () => uni.reLaunch({ url: '/pages/tabbar/profile/profile' })
-		})
-	}, 500)
+    if (uploadResult.code !== 200) {
+      throw new Error(uploadResult.msg)
+    }
+
+    // 保存逻辑也和你之前的版本一致
+    const backendBase = 'http://10.24.57.203:8003'
+    const realUrl = backendBase + uploadResult.url
+
+    addCommunityPost({
+      type: selectedMedia.value.type,
+      src: realUrl,
+      text: textContent.value || '分享一次新的网球训练',
+      createdAt: Date.now()
+    })
+
+    uni.showToast({ title: '发布成功！', icon: 'success' })
+    selectedMedia.value = { type: '', path: '' }
+    textContent.value = ''
+
+    setTimeout(() => {
+      uni.switchTab({ url: '/pages/tabbar/profile/profile' })
+    }, 800)
+
+  } catch (err) {
+    console.error('发布失败', err)
+    uni.showToast({ title: '发布失败', icon: 'error' })
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 const addTag = (tag) => {
@@ -220,7 +256,9 @@ const setPrivacy = () => {
 		}
 	})
 }
-
+const videoErr = (e) => {
+  console.error("❌ 视频播放错误：", e.detail);
+}
 const toggleAI = (e) => {
 	aiEnabled.value = e.detail.value
 }
