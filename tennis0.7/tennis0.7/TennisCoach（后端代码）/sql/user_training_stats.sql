@@ -1,0 +1,21 @@
+﻿CREATE TABLE IF NOT EXISTS `user_training_stats` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id` BIGINT NOT NULL COMMENT '用户ID',
+  `training_count` INT NOT NULL DEFAULT 0 COMMENT '总训练次数，一次成功AI分析计一次',
+  `total_duration_seconds` DOUBLE NOT NULL DEFAULT 0 COMMENT '累计训练时长，秒',
+  `avg_score` DOUBLE NOT NULL DEFAULT 0 COMMENT '总平均分，0-100',
+  `best_score` DOUBLE NOT NULL DEFAULT 0 COMMENT '历史最高分，0-100',
+  `forehand_count` INT NOT NULL DEFAULT 0 COMMENT '正手片段数',
+  `backhand_count` INT NOT NULL DEFAULT 0 COMMENT '反手片段数',
+  `serve_count` INT NOT NULL DEFAULT 0 COMMENT '发球片段数',
+  `forehand_avg_score` DOUBLE NOT NULL DEFAULT 0 COMMENT '正手平均分',
+  `backhand_avg_score` DOUBLE NOT NULL DEFAULT 0 COMMENT '反手平均分',
+  `serve_avg_score` DOUBLE NOT NULL DEFAULT 0 COMMENT '发球平均分',
+  `last_training_time` DATETIME DEFAULT NULL COMMENT '最近训练时间',
+  `consecutive_days` INT NOT NULL DEFAULT 0 COMMENT '连续训练天数',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_id` (`user_id`),
+  KEY `idx_last_training_time` (`last_training_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户训练统计汇总表';
