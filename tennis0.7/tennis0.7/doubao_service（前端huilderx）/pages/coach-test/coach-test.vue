@@ -246,7 +246,7 @@ const playNextTTS = () => {
     console.log("🔊 播放TTS：", text);
 
     uni.request({
-        url: "http://192.168.1.53:9002/api/tts",
+        url: "http://192.168.1.53:9000/api/tts",
         method: "POST",
         header: { "Content-Type": "application/json" },
         data: { text },

@@ -25,6 +25,18 @@ from services.tennis_final import (
 )
 
 
+POSE_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 7),
+    (0, 4), (4, 5), (5, 6), (6, 8),
+    (9, 10),
+    (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
+    (11, 23), (12, 24), (23, 24),
+    (23, 25), (25, 27), (27, 29), (27, 31), (29, 31),
+    (24, 26), (26, 28), (28, 30), (28, 32), (30, 32),
+)
+
+
 class TennisAnalysisService:
     """网球视频分析服务"""
 
@@ -133,6 +145,61 @@ class TennisAnalysisService:
         if url:
             self.pose_video_cache[key] = url
         return url
+
+    def _find_pose_landmarker_model(self) -> Optional[Path]:
+        """Find the MediaPipe Tasks pose landmarker model file."""
+        env_path = os.getenv("MEDIAPIPE_POSE_MODEL")
+        candidates = []
+        if env_path:
+            candidates.append(Path(env_path))
+
+        base_dir = Path(__file__).resolve().parent.parent
+        candidates.extend([
+            base_dir / "models" / "pose_landmarker_lite.task",
+            base_dir / "models" / "pose_landmarker_full.task",
+            base_dir / "weights" / "pose_landmarker_lite.task",
+            base_dir / "weights" / "pose_landmarker_full.task",
+            base_dir / "services" / "pose_landmarker_lite.task",
+            base_dir / "pose_landmarker_lite.task",
+        ])
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _draw_tasks_pose_landmarks(self, frame, landmarks, width: int, height: int):
+        """Draw MediaPipe Tasks normalized pose landmarks on an OpenCV frame."""
+        import cv2
+
+        points = []
+        for landmark in landmarks:
+            visibility = getattr(landmark, "visibility", 1.0)
+            presence = getattr(landmark, "presence", 1.0)
+            if visibility < 0.35 or presence < 0.35:
+                points.append(None)
+                continue
+
+            x = int(landmark.x * width)
+            y = int(landmark.y * height)
+            if x < 0 or y < 0 or x >= width or y >= height:
+                points.append(None)
+                continue
+            points.append((x, y))
+
+        for start_idx, end_idx in POSE_CONNECTIONS:
+            if start_idx >= len(points) or end_idx >= len(points):
+                continue
+            start = points[start_idx]
+            end = points[end_idx]
+            if start is None or end is None:
+                continue
+            cv2.line(frame, start, end, (80, 255, 170), 3)
+
+        for point in points:
+            if point is not None:
+                cv2.circle(frame, point, 4, (120, 255, 220), -1)
+
     def _create_pose_overlay_video(self, video_path: str) -> Optional[str]:
         """使用 MediaPipe 在原视频上绘制人体骨骼，并返回可被前端访问的静态 URL。"""
         cap = None
@@ -181,35 +248,81 @@ class TennisAnalysisService:
                 print("[服务] 骨骼可视化视频生成失败: 无法创建视频写入器")
                 return None
 
-            pose_module = mp.solutions.pose
-            drawing_utils = mp.solutions.drawing_utils
-            landmark_spec = drawing_utils.DrawingSpec(color=(120, 255, 220), thickness=2, circle_radius=3)
-            connection_spec = drawing_utils.DrawingSpec(color=(80, 255, 170), thickness=3, circle_radius=2)
-            pose = pose_module.Pose(
-                static_image_mode=False,
-                model_complexity=1,
-                smooth_landmarks=True,
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5,
-            )
+            if hasattr(mp, "solutions"):
+                pose_module = mp.solutions.pose
+                drawing_utils = mp.solutions.drawing_utils
+                landmark_spec = drawing_utils.DrawingSpec(color=(120, 255, 220), thickness=2, circle_radius=3)
+                connection_spec = drawing_utils.DrawingSpec(color=(80, 255, 170), thickness=3, circle_radius=2)
+                pose = pose_module.Pose(
+                    static_image_mode=False,
+                    model_complexity=1,
+                    smooth_landmarks=True,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5,
+                )
 
-            while True:
-                ok, frame = cap.read()
-                if not ok:
-                    break
+                while True:
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
 
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                result = pose.process(rgb)
-                if result.pose_landmarks:
-                    drawing_utils.draw_landmarks(
-                        frame,
-                        result.pose_landmarks,
-                        pose_module.POSE_CONNECTIONS,
-                        landmark_drawing_spec=landmark_spec,
-                        connection_drawing_spec=connection_spec,
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    result = pose.process(rgb)
+                    if result.pose_landmarks:
+                        drawing_utils.draw_landmarks(
+                            frame,
+                            result.pose_landmarks,
+                            pose_module.POSE_CONNECTIONS,
+                            landmark_drawing_spec=landmark_spec,
+                            connection_drawing_spec=connection_spec,
+                        )
+
+                    writer.write(frame)
+            else:
+                model_path = self._find_pose_landmarker_model()
+                if model_path is None:
+                    print(
+                        "[服务] 骨骼可视化视频生成失败: 新版 mediapipe.tasks 需要 "
+                        "pose_landmarker_lite.task，请放到 models/ 或设置 MEDIAPIPE_POSE_MODEL"
                     )
+                    return None
 
-                writer.write(frame)
+                from mediapipe.tasks import python as mp_python
+                from mediapipe.tasks.python import vision
+
+                # Pass model bytes instead of a filesystem path. MediaPipe's
+                # native layer can fail to open non-ASCII Windows paths.
+                base_options = mp_python.BaseOptions(model_asset_buffer=model_path.read_bytes())
+                options = vision.PoseLandmarkerOptions(
+                    base_options=base_options,
+                    running_mode=vision.RunningMode.VIDEO,
+                    num_poses=1,
+                    min_pose_detection_confidence=0.5,
+                    min_pose_presence_confidence=0.5,
+                    min_tracking_confidence=0.5,
+                )
+                pose = vision.PoseLandmarker.create_from_options(options)
+
+                frame_index = 0
+                while True:
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                    timestamp_ms = int(frame_index * 1000 / fps)
+                    result = pose.detect_for_video(image, timestamp_ms)
+                    if result.pose_landmarks:
+                        self._draw_tasks_pose_landmarks(
+                            frame,
+                            result.pose_landmarks[0],
+                            width,
+                            height,
+                        )
+
+                    writer.write(frame)
+                    frame_index += 1
 
             print(f"[服务] 骨骼可视化视频已生成: {output_path}")
             return f"/uploads/action_analysis/{output_name}"
@@ -335,6 +448,7 @@ class TennisAnalysisService:
 
                     phase_dtw = res.get("phase_dtw") or {}
                     standard_file = phase_dtw.get("standard_file")
+                    standard_annotation = self._load_standard_annotation(standard_file)
                     standard_video_path = self._find_standard_video_path(standard_file)
                     standard_pose_video_url = await self._get_pose_video_url(standard_video_path)
 

@@ -197,7 +197,7 @@ const goBack = () => {
 
 const WS_URL = 'ws://192.168.1.53:9000/ws/joints';
 const API_BASE_URL = 'http://192.168.1.53:9000';
-const TTS_BASE_URL = API_BASE_URL.replace(':9000', ':9002');
+const TTS_BASE_URL = API_BASE_URL;
 const RECONNECT_INTERVAL = 5000;
 const TYPING_SPEED = 50;
 const HEARTBEAT_INTERVAL = 10000; // 心跳间隔10秒

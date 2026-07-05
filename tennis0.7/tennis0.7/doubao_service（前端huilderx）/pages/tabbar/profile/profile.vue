@@ -79,14 +79,12 @@
               :src="post.src"
               mode="aspectFill"
             ></image>
-            <video
-              v-else
-              class="post-media"
-              :src="post.src"
-              :controls="false"
-              :show-center-play-btn="false"
-              object-fit="cover"
-            ></video>
+           <view
+             v-else
+             class="post-media"
+             :video-data="{ url: post.src, poster: post.poster }"
+             :change:video-data="mediaRender.renderMedia"
+           ></view>
             <view class="post-type">{{ post.type === 'image' ? '图文' : '视频' }}</view>
           </view>
           <view class="post-info">
@@ -123,13 +121,11 @@
       <view v-else class="record-grid">
         <view class="record-card" v-for="record in videoRecords" :key="record.id" @tap="previewVideo(record)">
           <view class="record-thumb">
-            <video
-              class="record-video"
-              :src="record.src"
-              :controls="false"
-              :show-center-play-btn="false"
-              object-fit="cover"
-            ></video>
+           <view
+             class="post-media"
+             :video-data="{ url: record.src, poster: record.poster }"
+             :change:video-data="mediaRender.renderMedia"
+           ></view>
             <view class="record-mask">
               <text class="record-play">▶</text>
             </view>
@@ -256,31 +252,40 @@ const goPostVideo = () => {
 const shootAndUploadVideo = () => {
   uni.chooseVideo({
     sourceType: ['camera', 'album'],
-    compressed: true,
-    maxDuration: 60,
     success: async (res) => {
-      uni.showLoading({
-        title: '上传中...'
-      })
+      // 🔥 上传到后端文件夹（核心）
+      uploadVideoToBackend(res.tempFilePath)
+    }
+  })
+}
 
-      // 模拟上传完成，并尽量把临时视频保存为本地持久文件，方便记录页回看。
-      const savedPath = await saveLocalVideo(res.tempFilePath)
-      setTimeout(() => {
-        const record = addVideoRecord({
-          src: savedPath,
-          title: '网球训练视频',
-          duration: res.duration || 0,
-          size: res.size || 0
-        })
+// ======================
+// 上传视频到后端 static/videos
+// ======================
+const uploadVideoToBackend = async (tempFilePath) => {
+  uni.showLoading({ title: "上传中..." })
 
-        uni.hideLoading()
-        uni.showToast({
-          title: '上传完成',
-          icon: 'success'
-        })
-        videoRecords.value = [{ ...record, dateText: formatDate(record.createdAt) }, ...videoRecords.value]
-        activeTab.value = 'records'
-      }, 700)
+  uni.uploadFile({
+    // 后端上传接口（我已经帮你写好）
+    url: "http://10.24.57.203:8003/api/feed/upload",
+    
+    // 上传的视频临时路径
+    filePath: tempFilePath,
+    
+    // 字段名必须是 video（后端已写好）
+    name: "video",
+    
+    success: (res) => {
+      uni.hideLoading()
+      uni.showToast({ title: "上传成功！已保存到后端" })
+      
+      // 上传完刷新首页视频列表
+      fetchVideoList()
+    },
+    
+    fail: () => {
+      uni.hideLoading()
+      uni.showToast({ title: "上传失败", icon: "error" })
     }
   })
 }
@@ -313,6 +318,9 @@ onShow(() => {
   padding: 0 32rpx;
   padding-top: var(--status-bar-height);
   padding-bottom: 30rpx;
+  position: relative;
+  z-index: 9999;
+  background: #0a0a0f;
 }
 
 .header-left,
@@ -627,7 +635,7 @@ onShow(() => {
   position: relative;
   width: 100%;
   height: 360rpx;
-  overflow: hidden;
+  overflow: hidden; /* 必须保留，裁切视频圆角 */
   background: #000;
 }
 
@@ -635,6 +643,11 @@ onShow(() => {
   width: 100%;
   height: 100%;
   display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  pointer-events: none;
+   overflow: hidden;
+    border-radius: 18rpx;
 }
 
 .post-type {
@@ -749,3 +762,87 @@ onShow(() => {
   color: rgba(255, 255, 255, 0.45);
 }
 </style>
+
+<script module="mediaRender" lang="renderjs">
+export default {
+  methods: {
+    // 修正：添加完整参数，用instance获取当前容器
+    renderMedia(newVal, oldVal, ownerInstance, instance) {
+      console.log('===== 视频渲染开始 =====');
+      console.log('接收到的数据:', newVal);
+
+      // 1. 检查数据是否有效
+      if (!newVal) {
+        console.log('❌ 数据为空，直接返回');
+        return;
+      }
+
+      // 2. 关键修复：用instance.$el获取当前循环项的容器
+      const container = instance?.$el;
+      if (!container) {
+        console.log('❌ 容器获取失败，instance.$el为undefined');
+        return;
+      }
+      console.log('✅ 容器获取成功', container);
+
+      // 3. 解析数据（兼容字符串/对象两种格式）
+      const data = typeof newVal === 'string' ? JSON.parse(newVal) : newVal;
+      if (!data || !data.url) {
+        console.log('❌ 视频地址为空，直接返回');
+        return;
+      }
+      console.log('✅ 解析后的视频地址:', data.url);
+
+      // 4. 清空容器，准备渲染
+      container.innerHTML = '';
+
+      // 5. 图片分支（和首页逻辑一致）
+      if (/\.(png|jpg|jpeg)$/i.test(data.url)) {
+        const img = document.createElement('img');
+        img.src = data.url;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;background:#000';
+        container.appendChild(img);
+        console.log('✅ 图片渲染完成');
+        return;
+      }
+
+      // 6. 视频分支（和首页逻辑完全对齐）
+      console.log('开始渲染视频:', data.url);
+      const video = document.createElement('video');
+      video.src = data.url;
+      video.poster = data.poster || '';
+      
+      // 和首页完全一致的配置
+      video.controls = false;
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.preload = 'auto'; // 新增预加载，解决黑框
+      
+      // 强制设置宽高，避免黑框
+      video.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;background:#000';
+
+      // 7. 视频加载成功监听
+      video.addEventListener('loadeddata', () => {
+        console.log('✅ 视频加载成功，开始播放');
+        video.play().catch((e) => {
+          console.log('⚠️ 视频播放失败:', e);
+        });
+      });
+
+      // 8. 视频加载失败监听（关键！看地址是否有效）
+      video.addEventListener('error', (e) => {
+        console.log('❌ 视频加载失败！错误信息:', e);
+        console.log('失败的视频地址:', data.url);
+        container.innerHTML = '<div style="color:#fff;text-align:center;padding:20rpx 0;line-height:1.5;">视频加载失败</div>';
+      });
+
+      // 9. 把视频添加到容器
+      container.appendChild(video);
+      console.log('✅ 视频DOM添加完成');
+    }
+  }
+}
+</script>
