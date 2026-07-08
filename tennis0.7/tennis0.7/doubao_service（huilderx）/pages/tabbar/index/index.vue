@@ -76,6 +76,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import CustomTabBar from '@/components/CustomTabBar/CustomTabBar.vue'
 import { addFavorite, getFavoriteFolders, isFavorited, isFollowing, removeFavorite, toggleFollow } from '@/utils/social-store/index.js'
+import { fetchPublicFeed } from '@/utils/video-api/index.js'
 
 const videoTab = ref('forYou')
 const currentVideoIndex = ref(0)
@@ -94,17 +95,6 @@ const currentVideoData = computed(() => JSON.stringify({
 	poster: currentVideo.value.poster || '',
 	type: currentVideo.value.mediaType || 'video' // 传递类型
 }))
-const LAN_FEED_API_BASE_URL = 'http://10.24.57.203:8003'
-const getFeedApiBaseUrl = () => {
-	// #ifdef H5
-	const host = window.location.hostname
-	if (host === 'localhost' || host === '127.0.0.1') {
-		return 'http://127.0.0.1:9000'
-	}
-	// #endif
-	return LAN_FEED_API_BASE_URL
-}
-const FEED_API_BASE_URL = getFeedApiBaseUrl()
 const fallbackVideoList = [
 	{
 		id: 'demo_1',
@@ -301,50 +291,10 @@ const stopProgress = () => {
 	}
 }
 
-// 修复后的请求函数（100%解决报错+对接后端）
 const fetchVideoList = async () => {
 	try {
-		// 核心：你的后端地址是 10.24.57.203:8003 必须写死正确！
-		const baseUrl = "http://10.24.57.203:8003"
-		
-		uni.request({
-			url: baseUrl + "/api/feed/list",
-			method: "GET",
-			data: { page: 1, page_size: 10 },
-			success: (response) => {
-				console.log("✅ 后端返回数据：", response)
-				// 正确解析后端数据
-				if (response.data && response.data.code === 200) {
-					const backendList = response.data.data
-					if (backendList.length > 0) {
-						setVideoList(backendList.map(item => ({
-							id: item.id,
-							userId: item.id,
-							videoUrl: baseUrl + item.src,
-							poster: baseUrl + item.cover,
-							avatar: "https://i.pravatar.cc/150?u=" + item.id,
-							author: '@TennisUser',
-							desc: item.desc || item.title,
-							music: 'Original Sound',
-							likes: Math.floor(Math.random()*10000),
-							comments: Math.floor(Math.random()*1000),
-							shares: Math.floor(Math.random()*500),
-							isLiked: false,
-							isFollowed: false,
-							isCollected: false,
-							mediaType: item.type
-						})))
-						return
-					}
-				}
-				// 无数据用兜底
-				setVideoList(fallbackVideoList)
-			},
-			fail: (err) => {
-				console.error("❌ 请求后端失败：", err)
-				setVideoList(fallbackVideoList)
-			}
-		})
+		const backendList = await fetchPublicFeed({ page: 1, pageSize: 10 })
+		setVideoList(backendList.length > 0 ? backendList : fallbackVideoList)
 	} catch (e) {
 		console.warn("视频流服务不可用，使用演示视频", e)
 		setVideoList(fallbackVideoList)

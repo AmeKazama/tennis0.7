@@ -21,6 +21,7 @@ from routers.diary import router as diary_router
 from routers.feed import register_feed_static, router as feed_router
 from routers.rally_cut import router as rally_router
 from routers.tts import register_tts_static, router as tts_router
+from routers.videos import router as videos_router
 from services.action_analysis_repository import save_action_analysis_record
 
 # 配置日志
@@ -79,6 +80,8 @@ app.include_router(rally_router)
 app.include_router(feed_router)
 # 注册文字转语音接口
 app.include_router(tts_router)
+# 注册用户视频库/发布公开接口
+app.include_router(videos_router)
 
 # 创建目录并暴露静态资源
 Path("uploads/audio").mkdir(parents=True, exist_ok=True)

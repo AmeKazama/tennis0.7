@@ -133,6 +133,14 @@
           <view class="record-info">
             <text class="record-title">{{ record.title }}</text>
             <text class="record-date">{{ record.dateText }}</text>
+            <view class="record-meta">
+              <text class="record-status">{{ record.visibility === 'public' ? '已公开' : '私密' }}</text>
+              <text
+                v-if="record.serverId && record.visibility !== 'public'"
+                class="publish-record-btn"
+                @tap.stop="publishRecord(record)"
+              >发布公开</text>
+            </view>
           </view>
         </view>
       </view>
@@ -184,9 +192,10 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppBottomNav from '@/components/AppBottomNav/AppBottomNav.vue'
-import { addVideoRecord, getVideoRecords, saveLocalVideo } from '@/utils/video-records/index.js'
+import { addVideoRecord, getVideoRecords } from '@/utils/video-records/index.js'
 import { getCommunityPosts } from '@/utils/community-posts/index.js'
 import { getFavoriteFolders, getFavorites, getProfile } from '@/utils/social-store/index.js'
+import { fetchMyVideos, publishVideo, uploadPrivateVideo } from '@/utils/video-api/index.js'
 
 const activeTab = ref('publish')
 const videoRecords = ref([])
@@ -194,6 +203,7 @@ const communityPosts = ref([])
 const favoriteFolders = ref([])
 const favoriteItems = ref([])
 const profile = ref(getProfile())
+const userId = 1
 const tabs = [
   { key: 'publish', label: '发布' },
   { key: 'records', label: '记录' },
@@ -221,11 +231,24 @@ const formatDate = (time) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-const loadRecords = () => {
-  videoRecords.value = getVideoRecords().map((record) => ({
-    ...record,
-    dateText: formatDate(record.createdAt)
-  }))
+const mapRecord = (record) => ({
+  ...record,
+  src: record.src || record.videoUrl,
+  poster: record.poster || record.cover,
+  visibility: record.visibility || 'private',
+  status: record.status || 'uploaded',
+  dateText: formatDate(record.createdAt || Date.now())
+})
+
+const loadRecords = async () => {
+  const localRecords = getVideoRecords().map(mapRecord)
+  try {
+    const backendRecords = await fetchMyVideos({ userId, pageSize: 50 })
+    videoRecords.value = backendRecords.length ? backendRecords.map(mapRecord) : localRecords
+  } catch (error) {
+    console.warn('我的视频库后端不可用，使用本地记录', error)
+    videoRecords.value = localRecords
+  }
 }
 
 const loadCommunityPosts = () => {
@@ -265,29 +288,50 @@ const shootAndUploadVideo = () => {
 const uploadVideoToBackend = async (tempFilePath) => {
   uni.showLoading({ title: "上传中..." })
 
-  uni.uploadFile({
-    // 后端上传接口（我已经帮你写好）
-    url: "http://10.24.57.203:8003/api/feed/upload",
-    
-    // 上传的视频临时路径
-    filePath: tempFilePath,
-    
-    // 字段名必须是 video（后端已写好）
-    name: "video",
-    
-    success: (res) => {
-      uni.hideLoading()
-      uni.showToast({ title: "上传成功！已保存到后端" })
-      
-      // 上传完刷新首页视频列表
-      fetchVideoList()
-    },
-    
-    fail: () => {
-      uni.hideLoading()
-      uni.showToast({ title: "上传失败", icon: "error" })
-    }
-  })
+  try {
+    const record = await uploadPrivateVideo({
+      filePath: tempFilePath,
+      userId,
+      title: '我的训练视频',
+      description: '保存到私人视频库',
+      sourceType: 'profile_upload'
+    })
+    addVideoRecord({
+      ...record,
+      title: record.title || '我的训练视频',
+      src: record.src,
+      poster: record.poster,
+      visibility: record.visibility,
+      status: record.status,
+      createdAt: Date.now()
+    })
+    uni.showToast({ title: "已保存到私人库" })
+    await loadRecords()
+  } catch (error) {
+    console.error('上传失败', error)
+    uni.showToast({ title: "上传失败", icon: "error" })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+const publishRecord = async (record) => {
+  if (!record.serverId) return
+  uni.showLoading({ title: '发布中...' })
+  try {
+    await publishVideo({
+      videoId: record.serverId,
+      userId,
+      content: record.text || record.title || '分享一次新的网球训练'
+    })
+    uni.showToast({ title: '已发布到首页' })
+    await loadRecords()
+  } catch (error) {
+    console.error('发布失败', error)
+    uni.showToast({ title: '发布失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 const previewVideo = (record) => {
@@ -760,6 +804,29 @@ onShow(() => {
 .record-date {
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.record-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 4rpx;
+}
+
+.record-status {
+  font-size: 21rpx;
+  color: rgba(222, 255, 154, 0.8);
+}
+
+.publish-record-btn {
+  flex-shrink: 0;
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  background: var(--primary-green);
+  color: #000;
+  font-size: 20rpx;
+  font-weight: 700;
 }
 </style>
 

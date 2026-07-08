@@ -88,7 +88,7 @@
 					<text class="option-icon">👁️</text>
 					<view class="label-group">
 						<text class="option-label">谁可以看</text>
-						<text class="option-sub">公开</text>
+						<text class="option-sub">{{ privacyText }}</text>
 					</view>
 				</view>
 				<text class="arrow-icon">></text>
@@ -107,12 +107,17 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { computed, ref } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
-import { addCommunityPost, saveLocalFile } from '@/utils/community-posts/index.js'
+import { addCommunityPost } from '@/utils/community-posts/index.js'
+import { addVideoRecord } from '@/utils/video-records/index.js'
+import { publishVideo, uploadPrivateVideo } from '@/utils/video-api/index.js'
 
 const textContent = ref('')
 const aiEnabled = ref(true)
+const userId = 1
+const privacy = ref('public')
+const privacyText = computed(() => privacy.value === 'public' ? '公开' : '私密')
 const selectedMedia = ref({
 	type: '',
 	path: ''
@@ -170,7 +175,6 @@ const selectMedia = () => {
 	})
 }
 
-// 替换你现在的 publishPost 函数
 const publishPost = async () => {
   if (!selectedMedia.value.path) {
     uni.showToast({ title: '请先选择图片或视频', icon: 'none' })
@@ -181,45 +185,52 @@ const publishPost = async () => {
 
   try {
     const isVideo = selectedMedia.value.type === 'video'
-    const uploadUrl = isVideo
-      ? 'http://10.24.57.203:8003/api/feed/upload'
-      : 'http://10.24.57.203:8003/api/feed/upload-cover'
+    const content = textContent.value || '分享一次新的网球训练'
 
-    // 上传逻辑和你之前成功的版本完全一致
-    const uploadResult = await new Promise((resolve, reject) => {
-      uni.uploadFile({
-        url: uploadUrl,
+    if (isVideo) {
+      let record = await uploadPrivateVideo({
         filePath: selectedMedia.value.path,
-        name: isVideo ? 'video' : 'file',
-        timeout: 60000,
-        success: (res) => {
-          try {
-            const data = JSON.parse(res.data)
-            resolve(data)
-          } catch (e) {
-            reject(e)
-          }
-        },
-        fail: reject
+        userId,
+        title: content.slice(0, 30),
+        description: content,
+        sourceType: 'post_video'
       })
-    })
 
-    if (uploadResult.code !== 200) {
-      throw new Error(uploadResult.msg)
+      if (privacy.value === 'public') {
+        record = await publishVideo({
+          videoId: record.serverId,
+          userId,
+          content
+        })
+        addCommunityPost({
+          ...record,
+          type: 'video',
+          src: record.src,
+          text: content,
+          createdAt: Date.now()
+        })
+      }
+
+      addVideoRecord({
+        ...record,
+        title: content.slice(0, 30) || '网球训练视频',
+        src: record.src,
+        poster: record.poster,
+        visibility: record.visibility,
+        status: record.status,
+        createdAt: Date.now()
+      })
+    } else {
+      addCommunityPost({
+        type: 'image',
+        src: selectedMedia.value.path,
+        text: content,
+        visibility: privacy.value,
+        createdAt: Date.now()
+      })
     }
 
-    // 保存逻辑也和你之前的版本一致
-    const backendBase = 'http://10.24.57.203:8003'
-    const realUrl = backendBase + uploadResult.url
-
-    addCommunityPost({
-      type: selectedMedia.value.type,
-      src: realUrl,
-      text: textContent.value || '分享一次新的网球训练',
-      createdAt: Date.now()
-    })
-
-    uni.showToast({ title: '发布成功！', icon: 'success' })
+    uni.showToast({ title: privacy.value === 'public' ? '发布成功！' : '已保存到私人库', icon: 'success' })
     selectedMedia.value = { type: '', path: '' }
     textContent.value = ''
 
@@ -250,9 +261,9 @@ const addLocation = () => {
 
 const setPrivacy = () => {
 	uni.showActionSheet({
-		itemList: ['公开', '仅好友可见', '私密'],
+		itemList: ['公开', '私密'],
 		success: (res) => {
-			console.log('选择了第' + (res.tapIndex + 1) + '个按钮')
+			privacy.value = res.tapIndex === 0 ? 'public' : 'private'
 		}
 	})
 }
