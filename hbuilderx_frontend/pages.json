@@ -1,0 +1,263 @@
+{
+	"pages": [ 
+		{
+			"path": "pages/tabbar/index/index",
+			"style": {
+				"navigationBarTitleText": "网球 AI 教练",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/tabbar/record/record",
+			"style": {
+				"navigationBarTitleText": "训练记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/tabbar/ai-coach-select/ai-coach-select",
+			"style": {
+				"navigationBarTitleText": "技术工坊",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/ai-coach/ai-coach-selection/ai-coach-selection",
+			"style": {
+				"navigationBarTitleText": "AI 教练",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/tabbar/data/data",
+			"style": {
+				"navigationBarTitleText": "训练数据",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/tabbar/profile/profile",
+			"style": {
+				"navigationBarTitleText": "我的",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/training/video-list/video-list",
+			"style": {
+				"navigationBarTitleText": "选择视频",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/ai-coach/action-guide/action-guide",
+			"style": {
+				"navigationBarTitleText": "单次动作指导",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/ai-coach/comprehensive-guide/comprehensive-guide",
+			"style": {
+				"navigationBarTitleText": "综合指导",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/ai-coach/coach-test/coach-test",
+			"style": {
+				"navigationBarTitleText": "AI网球教练实时监控",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/stats/compete/compete",
+			"style": {
+				"navigationBarTitleText": "训练数据",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/stats/achievement/achievement",
+			"style": {
+				"navigationBarTitleText": "成就墙",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/stats/report/report",
+			"style": {
+				"navigationBarTitleText": "训练报告",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/settings/serve/serve",
+			"style": {
+				"navigationBarTitleText": "发球训练",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/settings/setting/setting",
+			"style": {
+				"navigationBarTitleText": "设置",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/community/history/history",
+			"style": {
+				"navigationBarTitleText": "历史记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/content/diary/diary",
+			"style": {
+				"navigationBarTitleText": "打球日记",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/training/action-extraction/action-extraction",
+			"style": {
+				"navigationBarTitleText": "动作提取",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/training/action-comparison/action-comparison",
+			"style": {
+				"navigationBarTitleText": "动作对比",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/training/highlight-edit/highlight-edit",
+			"style": {
+				"navigationBarTitleText": "回合剪辑",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/content/post-video/post-video",
+			"style": {
+				"navigationBarTitleText": "发布视频",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/video-preview/video-preview",
+			"style": {
+				"navigationBarTitleText": "视频预览",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/edit-profile/edit-profile",
+			"style": {
+				"navigationBarTitleText": "编辑个人资料",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/devices/devices",
+			"style": {
+				"navigationBarTitleText": "智能设备",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/followers/followers",
+			"style": {
+				"navigationBarTitleText": "关注者",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/following/following",
+			"style": {
+				"navigationBarTitleText": "关注",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/equipment/equipment",
+			"style": {
+				"navigationBarTitleText": "我的装备",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/likes-favorites/likes-favorites",
+			"style": {
+				"navigationBarTitleText": "赞和收藏",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/new-followers/new-followers",
+			"style": {
+				"navigationBarTitleText": "新增关注",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/comments/comments",
+			"style": {
+				"navigationBarTitleText": "评论和@",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/system/system",
+			"style": {
+				"navigationBarTitleText": "系统消息",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/guidance/guidance",
+			"style": {
+				"navigationBarTitleText": "指导消息",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/chat/chat",
+			"style": {
+				"navigationBarTitleText": "聊天",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/messages/chat-detail/chat-detail",
+			"style": {
+				"navigationBarTitleText": "聊天详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/social/comments-detail/comments-detail",
+			"style": {
+				"navigationBarTitleText": "评论",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/user-profile/user-profile",
+			"style": {
+				"navigationBarTitleText": "个人主页",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "网球 AI 教练",
+		"navigationBarBackgroundColor": "#000000",
+		"backgroundColor": "#000000"
+	},
+	"uniIdRouter": {}
+}
