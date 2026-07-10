@@ -185,8 +185,8 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
+import { API_BASE_URL, normalizeMediaUrl } from '@/utils/api-config/index.js'
 
-const API_BASE_URL = 'http://127.0.0.1:9000'
 const POLL_INTERVAL_MS = 1200
 const MAX_POLL_COUNT = 180
 
@@ -311,27 +311,32 @@ const startCompare = async () => {
 }
 
 const submitAnalyzeTask = async () => {
-	const formData = new FormData()
-	const userBlob = await fetch(myVideo.value.path).then((res) => res.blob())
-	formData.append('file', userBlob, myVideo.value.name || 'user_video.mp4')
-	formData.append('selected_player', selectedPlayer.value.name)
-	formData.append('selected_stroke', selectedStroke.value.id)
-	formData.append('source_page', 'training_action_comparison')
-
-	const response = await fetch(`${API_BASE_URL}/api/analyze_video_submit`, {
-		method: 'POST',
-		body: formData
+	return new Promise((resolve, reject) => {
+		uni.uploadFile({
+			url: `${API_BASE_URL}/api/analyze_video_submit`,
+			filePath: myVideo.value.path,
+			name: 'file',
+			formData: {
+				selected_player: selectedPlayer.value.name,
+				selected_stroke: selectedStroke.value.id,
+				source_page: 'training_action_comparison'
+			},
+			timeout: 300000,
+			success: (res) => {
+				try {
+					const data = typeof res.data === 'string' ? JSON.parse(res.data || '{}') : res.data
+					if (!data.task_id) {
+						reject(new Error(data.detail || '分析任务创建失败'))
+						return
+					}
+					resolve(data.task_id)
+				} catch (error) {
+					reject(error)
+				}
+			},
+			fail: (error) => reject(new Error(error.errMsg || '视频分析提交失败'))
+		})
 	})
-
-	if (!response.ok) {
-		throw new Error(`视频分析提交失败：${response.status}`)
-	}
-
-	const data = await response.json()
-	if (!data.task_id) {
-		throw new Error('分析任务创建失败')
-	}
-	return data.task_id
 }
 
 const pollAnalyzeTask = async (taskId) => {
@@ -339,12 +344,7 @@ const pollAnalyzeTask = async (taskId) => {
 
 	for (let i = 0; i < MAX_POLL_COUNT; i += 1) {
 		progressText.value = `${Math.min(95, Math.round((i / MAX_POLL_COUNT) * 100))}%`
-		const response = await fetch(`${API_BASE_URL}/api/analyze_video_poll/${taskId}?offset=${taskOffset.value}`)
-		if (!response.ok) {
-			throw new Error(`轮询分析结果失败：${response.status}`)
-		}
-
-		const data = await response.json()
+		const data = await requestAnalyzePoll(taskId, taskOffset.value)
 		const items = Array.isArray(data.items) ? data.items : []
 		collected.push(...items)
 		taskOffset.value = data.total || taskOffset.value + items.length
@@ -364,6 +364,22 @@ const pollAnalyzeTask = async (taskId) => {
 
 	throw new Error('分析超时，请稍后重试')
 }
+
+const requestAnalyzePoll = (taskId, offset) => new Promise((resolve, reject) => {
+	uni.request({
+		url: `${API_BASE_URL}/api/analyze_video_poll/${taskId}`,
+		method: 'GET',
+		data: { offset },
+		success: (res) => {
+			if (res.statusCode >= 400) {
+				reject(new Error(`轮询分析结果失败：${res.statusCode}`))
+				return
+			}
+			resolve(res.data || {})
+		},
+		fail: (error) => reject(new Error(error.errMsg || '轮询分析结果失败'))
+	})
+})
 
 const applyAnalysisResult = (items) => {
 	const segments = items.filter((item) => item.type === 'segment').map((item) => item.data || {})
@@ -393,12 +409,6 @@ const applyAnalysisResult = (items) => {
 	analysisReport.value = buildReportFromSegments(segments, summary)
 	playAnalyzedVideos()
 }
-const normalizeMediaUrl = (url) => {
-	if (!url || typeof url !== 'string') return ''
-	if (/^https?:\/\//.test(url) || url.startsWith('blob:') || url.startsWith('file:')) return url
-	return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
-}
-
 const findFirstValue = (source, keys) => {
 	if (!source || typeof source !== 'object') return undefined
 	for (const key of keys) {

@@ -1,18 +1,6 @@
-const LAN_API_BASE_URL = 'http://192.168.1.53:9000'
+import { API_BASE_URL, getApiBaseUrl } from '@/utils/api-config/index.js'
 
-export const getApiBaseUrl = () => {
-	// #ifdef H5
-	if (typeof window !== 'undefined') {
-		const host = window.location.hostname
-		if (host === 'localhost' || host === '127.0.0.1') {
-			return 'http://127.0.0.1:9000'
-		}
-	}
-	// #endif
-	return LAN_API_BASE_URL
-}
-
-export const API_BASE_URL = getApiBaseUrl()
+export { API_BASE_URL, getApiBaseUrl }
 
 const parseUploadResponse = (res) => {
 	const raw = typeof res.data === 'string' ? JSON.parse(res.data || '{}') : res.data

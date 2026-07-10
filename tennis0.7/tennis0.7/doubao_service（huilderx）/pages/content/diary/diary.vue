@@ -85,17 +85,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
+import { API_BASE_URL } from '@/utils/api-config/index.js'
 
-const LAN_API_BASE_URL = 'http://192.168.1.53:9000'
-const getApiBaseUrl = () => {
-	// #ifdef H5
-	const host = window.location.hostname
-	if (host === 'localhost' || host === '127.0.0.1') return 'http://127.0.0.1:9000'
-	// #endif
-	return LAN_API_BASE_URL
-}
-
-const API_BASE_URL = getApiBaseUrl()
 const VOICE_DIARY_API_URL = `${API_BASE_URL}/api/diary/voice`
 const DIARY_LIST_API_URL = `${API_BASE_URL}/api/diary/list`
 

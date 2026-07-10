@@ -148,18 +148,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import Layout from '@/components/Layout/Layout.vue'
-
-const LAN_API_BASE_URL = 'http://192.168.1.53:9000'
-const getApiBaseUrl = () => {
-	// #ifdef H5
-	const host = window.location.hostname
-	if (host === 'localhost' || host === '127.0.0.1') {
-		return 'http://localhost:9000'
-	}
-	// #endif
-	return LAN_API_BASE_URL
-}
-const API_BASE_URL = getApiBaseUrl()
+import { API_BASE_URL } from '@/utils/api-config/index.js'
 
 const toWebUrl = (path) => {
 	if (!path) return path

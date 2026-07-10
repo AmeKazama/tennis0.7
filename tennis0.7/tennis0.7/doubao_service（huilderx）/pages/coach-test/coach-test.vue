@@ -173,10 +173,10 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { API_BASE_URL, WS_URL } from '@/utils/api-config/index.js';
 
 // ===================== 【改成你电脑的局域网IP】 =====================
-const API_BASE_URL = 'http://192.168.1.53:9000';
-const WS_URL = 'ws://192.168.1.53:9000/ws/joints';
+const TTS_BASE_URL = API_BASE_URL;
 // ==================================================================
 
 // http 变成 https
@@ -246,7 +246,7 @@ const playNextTTS = () => {
     console.log("🔊 播放TTS：", text);
 
     uni.request({
-        url: "http://192.168.1.53:9000/api/tts",
+        url: `${TTS_BASE_URL}/api/tts`,
         method: "POST",
         header: { "Content-Type": "application/json" },
         data: { text },

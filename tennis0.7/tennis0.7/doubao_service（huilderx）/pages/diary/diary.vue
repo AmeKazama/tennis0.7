@@ -15,6 +15,8 @@
 </template>
 
 <script>
+import { ASR_API_BASE_URL } from '@/utils/api-config/index.js';
+
 export default {
 	data() {
 		return {
@@ -58,7 +60,7 @@ export default {
 		uploadToServer(filePath) {
 			uni.showLoading({title:"识别中..."});
 			uni.uploadFile({
-				url: "http://192.168.1.53:9002/api/ali_asr",
+				url: `${ASR_API_BASE_URL}/api/ali_asr`,
 				filePath: filePath,
 				name: "audio",
 				success: (res) => {

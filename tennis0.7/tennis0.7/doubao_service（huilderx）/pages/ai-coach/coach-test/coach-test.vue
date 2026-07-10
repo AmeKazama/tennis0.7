@@ -190,13 +190,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
+import { API_BASE_URL, WS_URL } from '@/utils/api-config/index.js';
 
 const goBack = () => {
     uni.navigateBack();
 };
 
-const WS_URL = 'ws://192.168.1.53:9000/ws/joints';
-const API_BASE_URL = 'http://192.168.1.53:9000';
 const TTS_BASE_URL = API_BASE_URL;
 const RECONNECT_INTERVAL = 5000;
 const TYPING_SPEED = 50;

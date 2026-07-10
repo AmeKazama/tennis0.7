@@ -149,8 +149,10 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { API_BASE_URL } from '@/utils/api-config/index.js'
 
-const API_BASE_URL = 'http://127.0.0.1:9000'
+const POLL_INTERVAL_MS = 1200
+const MAX_POLL_COUNT = 180
 
 const players = [
 	{ id: 'donald', name: '唐纳德' },
@@ -267,23 +269,99 @@ const startCompare = async () => {
 }
 
 const submitCompareTask = async () => {
-	const formData = new FormData()
-	const userBlob = await fetch(myVideo.value.path).then((res) => res.blob())
-	formData.append('user_video', userBlob, myVideo.value.name || 'user_video.mp4')
-	formData.append('player', selectedPlayer.value.id)
-	formData.append('stroke_type', selectedStroke.value.id)
-	formData.append('standard_video_path', standardVideoPath.value)
-
-	const response = await fetch(`${API_BASE_URL}/api/action_compare_submit`, {
-		method: 'POST',
-		body: formData
-	})
-
-	if (!response.ok) {
-		throw new Error(`动作分析请求失败：${response.status}`)
+	const taskId = await submitAnalyzeTask()
+	const items = await pollAnalyzeTask(taskId)
+	const segments = items.filter((item) => item.type === 'segment').map((item) => item.data || {})
+	return {
+		user_pose_video_url: findFirstValue(segments[0] || {}, ['pose_video_url', 'annotated_video_url', 'skeleton_video_url', 'result_video_url', 'output_video_url']) || '',
+		standard_pose_video_url: findFirstValue(segments[0] || {}, ['standard_pose_video_url', 'standard_annotated_video_url', 'standard_skeleton_video_url']) || '',
+		report: buildReportFromSegments(segments)
 	}
+}
 
-	return response.json()
+const submitAnalyzeTask = () => new Promise((resolve, reject) => {
+	uni.uploadFile({
+		url: `${API_BASE_URL}/api/analyze_video_submit`,
+		filePath: myVideo.value.path,
+		name: 'file',
+		formData: {
+			selected_player: selectedPlayer.value.name,
+			selected_stroke: selectedStroke.value.id,
+			source_page: 'action_comparison'
+		},
+		timeout: 300000,
+		success: (res) => {
+			try {
+				const data = typeof res.data === 'string' ? JSON.parse(res.data || '{}') : res.data
+				if (!data.task_id) {
+					reject(new Error(data.detail || '分析任务创建失败'))
+					return
+				}
+				resolve(data.task_id)
+			} catch (error) {
+				reject(error)
+			}
+		},
+		fail: (error) => reject(new Error(error.errMsg || '动作分析请求失败'))
+	})
+})
+
+const pollAnalyzeTask = async (taskId) => {
+	const collected = []
+	let offset = 0
+	for (let i = 0; i < MAX_POLL_COUNT; i += 1) {
+		const data = await requestAnalyzePoll(taskId, offset)
+		const items = Array.isArray(data.items) ? data.items : []
+		collected.push(...items)
+		offset = data.total || offset + items.length
+		const errorItem = items.find((item) => item.type === 'error')
+		if (errorItem) throw new Error(errorItem.message || '动作分析失败')
+		if (data.done) return collected
+		await sleep(POLL_INTERVAL_MS)
+	}
+	throw new Error('分析超时，请稍后重试')
+}
+
+const requestAnalyzePoll = (taskId, offset) => new Promise((resolve, reject) => {
+	uni.request({
+		url: `${API_BASE_URL}/api/analyze_video_poll/${taskId}`,
+		method: 'GET',
+		data: { offset },
+		success: (res) => {
+			if (res.statusCode >= 400) {
+				reject(new Error(`轮询分析结果失败：${res.statusCode}`))
+				return
+			}
+			resolve(res.data || {})
+		},
+		fail: (error) => reject(new Error(error.errMsg || '轮询分析结果失败'))
+	})
+})
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const findFirstValue = (source, keys) => {
+	if (!source || typeof source !== 'object') return ''
+	for (const key of keys) {
+		if (source[key] !== undefined && source[key] !== null && source[key] !== '') return source[key]
+	}
+	return ''
+}
+
+const buildReportFromSegments = (segments) => {
+	if (!segments.length) return buildLocalReport()
+	const lines = [`对比目标：${selectedPlayer.value.name}的${selectedStroke.value.name}`]
+	segments.forEach((segment, index) => {
+		const analysis = segment.analysis || segment.dtw_analysis || segment.result || {}
+		const shot = segment.shot_type_cn || segment.shot_type || `片段 ${index + 1}`
+		const grade = analysis.grade || analysis.rating || segment.grade || '未评级'
+		const distance = analysis.distance ?? analysis.dtw_distance ?? segment.distance
+		const advice = segment.coach_advice || analysis.coach_advice || ''
+		lines.push(`片段 ${index + 1}：${shot}`)
+		lines.push(`评分：${grade}${distance !== undefined && distance !== null ? `，相似度距离：${Number(distance).toFixed(2)}` : ''}`)
+		if (advice) lines.push(`教练建议：${advice}`)
+	})
+	return lines.join('\n')
 }
 
 const buildLocalReport = () => {
