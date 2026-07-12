@@ -1,4 +1,9 @@
-﻿import time
+import time
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import time
 import asyncio
 import json
 import traceback
@@ -21,6 +26,18 @@ from routers.diary import router as diary_router
 from routers.feed import register_feed_static, router as feed_router
 from routers.rally_cut import router as rally_router
 from routers.tts import register_tts_static, router as tts_router
+from routers.user_profile import router as user_profile_router
+from routers.user_follow import router as user_follow_router
+from routers.user_device import router as user_device_router
+from routers.user_badge import router as user_badge_router
+from routers.user_training_stats import router as user_training_stats_router
+from routers.action_analysis_record import router as action_analysis_record_router
+from routers.action_analysis_segment import router as action_analysis_segment_router
+from routers.training_video_record import router as training_video_record_router
+from routers.ball_diary import router as ball_diary_router
+from routers.community_post import router as community_post_router
+from routers.favorite_folder import router as favorite_folder_router
+from routers.favorite_item import router as favorite_item_router
 from routers.videos import router as videos_router
 from services.action_analysis_repository import save_action_analysis_record
 
@@ -49,6 +66,25 @@ except ImportError as e:
 
 
 app = FastAPI(title="网球 AI 教练后端")
+H5_DIR = Path(__file__).resolve().parent / "h5"
+
+if H5_DIR.exists():
+    app.mount(
+        "/h5",
+        StaticFiles(directory=str(H5_DIR), html=True),
+        name="h5",
+    )
+
+# H5 临时测试：兼容 HBuilderX 打包后从根路径 /assets、/static 加载资源
+ASSETS_DIR = H5_DIR / "assets"
+STATIC_H5_DIR = H5_DIR / "static"
+
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="h5_assets")
+
+if STATIC_H5_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_H5_DIR)), name="h5_static")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,7 +116,31 @@ app.include_router(rally_router)
 app.include_router(feed_router)
 # 注册文字转语音接口
 app.include_router(tts_router)
-# 注册用户视频库/发布公开接口
+# 用户信息接口
+app.include_router(user_profile_router)
+# 用户关注接口
+app.include_router(user_follow_router)
+# 用户设备接口
+app.include_router(user_device_router)
+# 用户勋章接口
+app.include_router(user_badge_router)
+# 用户训练数据接口
+app.include_router(user_training_stats_router)
+# 动作分析主记录接口
+app.include_router(action_analysis_record_router)
+# 动作分析片段记录接口
+app.include_router(action_analysis_segment_router)
+# 训练视频接口
+app.include_router(training_video_record_router)
+# 打球日记接口
+app.include_router(ball_diary_router)
+# 社区发布内容接口
+app.include_router(community_post_router)
+# 收藏夹接口
+app.include_router(favorite_folder_router)
+# 收藏内容明细接口
+app.include_router(favorite_item_router)
+# 短视频接口
 app.include_router(videos_router)
 
 # 创建目录并暴露静态资源
@@ -416,7 +476,7 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=9000,
+        port=6006,
         log_level="info",
         # ws_max_size=16777216,
         # ssl_keyfile="./key.pem",
