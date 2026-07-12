@@ -1,8 +1,8 @@
-from sqlalchemy import Column, BigInteger, String, Integer, Date, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+﻿from sqlalchemy import BigInteger, Column, Date, DateTime, Integer, String
+from sqlalchemy.sql import func
 
-Base = declarative_base()
+from database import Base
+
 
 class UserProfile(Base):
     __tablename__ = "user_profile"
@@ -18,8 +18,8 @@ class UserProfile(Base):
     dominant_hand = Column(String(20), nullable=True, comment="持拍手")
     gender = Column(String(20), nullable=True, comment="性别")
     birthday = Column(Date, nullable=True, comment="生日")
-    phone = Column(String(30), nullable=True, comment="手机号")
-    email = Column(String(120), nullable=True, comment="邮箱")
+    phone = Column(String(30), nullable=True, index=True, comment="手机号")
+    email = Column(String(120), nullable=True, index=True, comment="邮箱")
     followers_count = Column(Integer, nullable=False, default=0, comment="粉丝数")
     following_count = Column(Integer, nullable=False, default=0, comment="关注数")
     favorite_count = Column(Integer, nullable=False, default=0, comment="收藏数")
@@ -28,5 +28,11 @@ class UserProfile(Base):
     analysis_count = Column(Integer, nullable=False, default=0, comment="动作分析次数")
     device_count = Column(Integer, nullable=False, default=0, comment="绑定设备数")
     badge_count = Column(Integer, nullable=False, default=0, comment="荣誉勋章数")
-    create_time = Column(DateTime, nullable=False, default=datetime.now, comment="创建时间")
-    update_time = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+    create_time = Column(DateTime, nullable=False, server_default=func.now(), comment="创建时间")
+    update_time = Column(
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="更新时间",
+    )
