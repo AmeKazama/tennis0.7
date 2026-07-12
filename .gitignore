@@ -80,3 +80,29 @@ court_detection_debug.jpg
 *.log
 *.tmp
 *.bak
+
+# Python cache
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Environment secrets
+.env
+
+# Runtime uploads
+uploads/
+**/uploads/
+
+# Generated H5 files and server backups
+**/h5/
+**/h5_new/
+**/h5_tmp/
+**/h5_backup_*/
+**/web_h5/
+**/web_h5_backup_*/
+
+# Local database backup
+*.sql
+
+# Temporary backup files
+*_backup_*.py
