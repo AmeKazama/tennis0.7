@@ -250,3 +250,71 @@ git push
 ```
 
 如果本地和远端同时有修改，不要直接强推。先 `pull --rebase`，解决冲突后再 push。
+
+## 11. 服务器（Linux）部署启动
+
+> 本节面向**生产服务器部署**（Linux + conda + GPU），与上面的 Windows 开发机流程不同。
+> 在服务器上**只通过 `start.sh` 启动后端**，不要再手动 `python main.py`，避免环境、代理、日志路径等出现歧义。
+
+### 11.1 启动入口
+
+后端代码目录下有一个统一的启动脚本：
+
+```text
+tennis0.7/tennis0.7/tennis0.7/TennisCoach_backend/start.sh
+```
+
+所有操作都通过它：
+
+```bash
+cd tennis0.7/tennis0.7/tennis0.7/TennisCoach_backend
+
+./start.sh              # 启动（默认子命令）
+./start.sh start        # 同上；如已在运行则跳过
+./start.sh stop         # 停止（先 SIGTERM，10s 后 SIGKILL）
+./start.sh restart      # 重启
+./start.sh status       # 查看运行状态
+./start.sh logs         # 跟踪 server.log（Ctrl+C 退出）
+```
+
+脚本会自动：
+
+- **强制使用 conda `tennis` 环境的 python**（`/root/miniconda3/envs/tennis/bin/python`），避免误用 base 环境
+- **屏蔽代理环境变量**（`HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等），让后端对梯子开关免疫（见 11.2）
+- 用 `nohup` 后台运行，关闭终端不影响
+- 启动后自动等待 `/health` 就绪，超时会提示查看日志
+
+### 11.2 为什么必须屏蔽代理变量
+
+后端调用的外部 API（豆包 `ark.cn-beijing.volces.com`、百度语音）都是**国内服务**，根本不需要走梯子。但 Python 的 `httpx` / `requests` 默认会读取 shell 里的 `HTTP_PROXY` 等环境变量；如果服务器上开了 clash（监听 `127.0.0.1:7890`），一旦梯子关闭：
+
+- 健康检查 `/health` 仍然返回 200（看似正常）
+- 但所有调用豆包 / 百度语音的接口会因连不上 `127.0.0.1:7890` 而**静默失败**
+
+因此脚本启动时统一 `unset` 掉这些变量，保证后端行为与梯子开关完全解耦。
+
+### 11.3 容器重启后的恢复
+
+容器重启后，后端**不会自启**。需要登录后手动执行：
+
+```bash
+cd /root/autodl-tmp/tennis0.7/tennis0.7/tennis0.7/TennisCoach_backend
+./start.sh start
+```
+
+验证：
+
+```bash
+curl http://127.0.0.1:6006/health     # 应返回 {"status":"healthy",...}
+./start.sh status
+```
+
+### 11.4 验证代理变量是否真的被屏蔽
+
+```bash
+# 找到后端进程 PID
+./start.sh status
+
+# 查看该进程的环境变量（应无任何 proxy 输出）
+cat /proc/<PID>/environ | tr '\0' '\n' | grep -i proxy
+```
