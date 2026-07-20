@@ -207,7 +207,7 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
     if not frame_angles:
         return None
 
-    phase = infer_phase_boundaries(frame_angles, start_frame, end_frame, impact_frame)
+    phase = infer_phase_boundaries(frame_angles, start_frame, end_frame, impact_frame, shot_type=shot_type)
     angles = [
         {"frame": fid, "angles": frame_angles[fid]}
         for fid in range(start_frame, end_frame + 1)
@@ -231,29 +231,66 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
     }
 
 
-def infer_phase_boundaries(frame_angles, start_frame, end_frame, impact_frame):
+# ============================================================================
+# forward_start 间隔统计先验（来自 58 个 Label Studio 手工标注实测中位数）
+# 数据源：tennis0.7/264/*_final.json，单位：帧（30fps）
+# ----------------------------------------------------------------------------
+# 原 forward_start 用 max_delta * 0.35 的相对阈值找右肘角变化率首次过阈值点，
+# 但 max_delta 最常出现在 backswing_peak 邻帧（引拍→前挥的转换本身就是角度
+# 变化最剧烈的时刻），导致 forward_start 几乎总贴着 backswing_peak，与
+# 实测 5-6 帧间隔严重不符。改为用统计先验的固定中位间隔。
+# ============================================================================
+_FORWARD_START_OFFSET_PRIOR = {
+    # shot_type: (forward_start - backswing_peak 中位数, n, stdev)
+    "forehand": 6,   # n=21, mean=7.4, median=6, stdev=4.7
+    "backhand": 5,   # n=17, mean=4.9, median=5, stdev=1.4
+    "serve":    5,   # n=20, mean=8.4, median=5, stdev=14（发球变化大，用中位数）
+}
+_FORWARD_START_OFFSET_DEFAULT = 5
+
+# backswing_peak 选哪个关节找角度最小（反手主导手是左手，正手/发球是右手）
+_BACKSWING_JOINT = {
+    "forehand": "right_elbow",
+    "backhand": "left_elbow",   # 关键修复：反手用左肘，原代码硬用 right_elbow 导致反手 backswing_peak 跑到随挥末尾
+    "serve":    "right_elbow",
+}
+_BACKSWING_JOINT_DEFAULT = "right_elbow"
+
+
+def infer_phase_boundaries(frame_angles, start_frame, end_frame, impact_frame, shot_type="unknown"):
+    """从逐帧角度序列推断 5 个阶段边界帧号。
+
+    历史 bug（2026-07-20 修复）：
+    - backswing_peak 原硬编码用 right_elbow 角度最小帧，对反手失效（反手主导
+      手是左手，右肘角度最小帧经常出现在反手随挥结束时手抱到对侧肩膀的位置，
+      导致 backswing_peak 跑到随挥末尾，下游 forward_start 全错）。
+      改为按 shot_type 选关节：反手用 left_elbow，其余保留 right_elbow。
+    - forward_start 原用 max_delta * 0.35 相对阈值找右肘角变化率首次过阈值点，
+      但 max_delta 最常出现在 backswing_peak 邻帧，导致 forward_start 几乎
+      总贴 backswing_peak。改为用 58 个标注实测的中位间隔先验。
+
+    Args:
+        frame_angles: {frame_id: {joint: angle}} 逐帧角度
+        start_frame, end_frame, impact_frame: 已知边界
+        shot_type: "forehand" | "backhand" | "serve" | "unknown"，决定选关节和间隔先验
+    """
     pre_frames = [f for f in frame_angles if start_frame <= f <= impact_frame]
     post_frames = [f for f in frame_angles if impact_frame <= f <= end_frame]
     if not pre_frames:
         pre_frames = [start_frame, impact_frame]
 
+    # ── backswing_peak：按 shot_type 选关节找角度最小帧 ──
+    joint_key = _BACKSWING_JOINT.get(shot_type, _BACKSWING_JOINT_DEFAULT)
     backswing_peak = min(
         pre_frames,
-        key=lambda f: frame_angles.get(f, {}).get("right_elbow", float("inf"))
+        key=lambda f: frame_angles.get(f, {}).get(joint_key, float("inf"))
     )
 
-    search = [f for f in pre_frames if backswing_peak <= f <= impact_frame]
-    if len(search) >= 3:
-        values = [(f, frame_angles[f].get("right_elbow", 0.0)) for f in search]
-        deltas = []
-        for (fa, va), (fb, vb) in zip(values, values[1:]):
-            deltas.append((fb, abs(vb - va)))
-        max_delta = max((d for _, d in deltas), default=0.0)
-        threshold = max(3.0, max_delta * 0.35)
-        forward_start = next((f for f, d in deltas if d >= threshold), search[0])
-    else:
-        forward_start = search[0] if search else backswing_peak
+    # ── forward_start：用统计先验的中位间隔，不再用相对阈值 ──
+    offset = _FORWARD_START_OFFSET_PRIOR.get(shot_type, _FORWARD_START_OFFSET_DEFAULT)
+    forward_start = backswing_peak + offset
 
+    # 逻辑约束兜底
     if forward_start > impact_frame:
         forward_start = impact_frame
     if backswing_peak > forward_start:

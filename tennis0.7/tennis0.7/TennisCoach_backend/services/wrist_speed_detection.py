@@ -153,27 +153,60 @@ def compute_fused_speed(kp_seq, img_w, img_h,
     }
 
 
+# ============================================================================
+# 关键帧位置统计先验
+# 数据源：tennis0.7/264/*_final.json（58 个 Label Studio 手工标注）
+# 提取脚本：见 commit "撤掉 pick_impact_frame_by_type 硬编码窗口偏置"
+# 更新日期：2026-07-20
+# ----------------------------------------------------------------------------
+# impact 在窗口中的相对位置极其稳定（stdev 0.05-0.12），可作为定位锚点，
+# 比"在固定帧区间找速度峰"鲁棒得多——后者隐含"窗口长度固定"假设，
+# 而 SkeletonRecorder 切出的窗口实际浮动 20~60 帧。
+# ============================================================================
+_IMPACT_REL_PRIOR = {
+    # shot_type: (impact_rel_median, n_samples, stdev)
+    "forehand": 0.70,   # n=21, mean=0.74, median=0.70, stdev=0.09
+    "backhand": 0.70,   # n=17, mean=0.72, median=0.70, stdev=0.12
+    "serve":    0.80,   # n=20, mean=0.75, median=0.80, stdev=0.05
+}
+_IMPACT_REL_DEFAULT = 0.70   # unknown / 异常 shot_type 的兜底
+_IMPACT_SEARCH_RADIUS = 5    # 在锚点 ±N 帧内找速度峰精修
+
+
 def pick_impact_frame_by_type(
     speed,
     valid_mask,
     shot_type,
-    head_pad_ratio=0.20,
-    tail_pad_ratio=0.20,
+    head_pad_ratio=0.10,
+    tail_pad_ratio=0.10,
 ):
     """
-    根据击球类型选择精确击球帧 (完全照抄 extract_frame_samples.py 的逻辑)
+    根据击球类型选择精确击球帧。
+
+    历史 bug（2026-07-20 修复）：
+    原实现按 shot_type 写死了搜索区间（forehand [10,30) / backhand 前 22 帧 /
+    serve 后半段），隐含"窗口长度固定且击球总在固定位置"假设。但 SkeletonRecorder
+    的窗口由 RNN 概率曲线粗切，长度浮动 20~60 帧，导致：
+    - forehand：impact 强制落在 [10,30)，真击球若在 35 帧则严重偏早
+    - backhand：窗口 ≤22 帧时搜全窗，反手随挥大开大合速度更大被误选为 impact
+
+    新算法：用 58 个 Label Studio 标注的 impact_rel 中位数作锚点，在锚点
+    ±_IMPACT_SEARCH_RADIUS 帧内找速度峰精修。对任意窗口长度都适用。
 
     Args:
         speed: (T,) 速度曲线
         valid_mask: (T,) 有效掩码
         shot_type: "forehand" | "backhand" | "serve" | "unknown"
-        head_pad_ratio: 头部排除比例
-        tail_pad_ratio: 尾部排除比例
+        head_pad_ratio: 头部排除比例（默认 0.10，比原 0.20 收窄，给锚点更多空间）
+        tail_pad_ratio: 尾部排除比例（默认 0.10）
 
     Returns:
-        int: 击球帧索引
+        int: 击球帧索引（窗口内相对位置）
     """
     T = len(speed)
+    if T == 0:
+        return 0
+
     head = max(1, int(T * head_pad_ratio))
     tail = max(1, int(T * tail_pad_ratio))
 
@@ -182,51 +215,29 @@ def pick_impact_frame_by_type(
     candidate[-tail:] = -np.inf
     candidate[~valid_mask] = -np.inf
 
+    # 全无效时回退到全局 argmax（速度曲线本身，不受 padding 影响）
     if np.all(np.isneginf(candidate)):
         return int(np.argmax(speed))
 
-    # 根据 shot_type 选择策略
-    if shot_type == "forehand":
-        # forehand: 在 10-30 帧之间找最高速度
-        start = 10
-        end = min(30, T)
-        if start >= end:
-            return int(np.argmax(candidate))
+    # 1) 用统计先验的 impact_rel 作为锚点
+    impact_rel = _IMPACT_REL_PRIOR.get(shot_type, _IMPACT_REL_DEFAULT)
+    anchor = int(T * impact_rel)
 
-        valid_in_range = [i for i in range(start, end)
-                         if valid_mask[i] and candidate[i] > -np.inf]
-        if not valid_in_range:
-            return int(np.argmax(candidate))
+    # 2) 在锚点 ±_IMPACT_SEARCH_RADIUS 帧内找速度峰
+    search_start = max(head, anchor - _IMPACT_SEARCH_RADIUS)
+    search_end = min(T - tail, anchor + _IMPACT_SEARCH_RADIUS + 1)
 
-        return int(max(valid_in_range, key=lambda i: speed[i]))
-
-    elif shot_type == "backhand":
-        # backhand: 在前 22 帧找最高速度
-        end = min(22, T)
-        if end <= 0:
-            return int(np.argmax(candidate))
-
-        valid_in_range = [i for i in range(end)
-                         if valid_mask[i] and candidate[i] > -np.inf]
-        if not valid_in_range:
-            return int(np.argmax(candidate))
-
-        return int(max(valid_in_range, key=lambda i: speed[i]))
-
-    elif shot_type == "serve":
-        # serve: 找最后一个显著峰值
-        # 简化版: 在后半段找最大值
-        mid = T // 2
-        mid_candidate = candidate.copy()
-        mid_candidate[:mid] = -np.inf
-
-        if np.all(np.isneginf(mid_candidate)):
-            return int(np.argmax(candidate))
-        return int(np.argmax(mid_candidate))
-
-    else:  # unknown
-        # 全局最大值
+    if search_start >= search_end:
+        # 窗口过窄，锚点附近无法容纳搜索区，退化到全局 argmax
         return int(np.argmax(candidate))
+
+    search_slice = candidate[search_start:search_end]
+    if np.all(np.isneginf(search_slice)):
+        # 锚点附近都无效，退化到全局 argmax
+        return int(np.argmax(candidate))
+
+    local_peak = int(np.argmax(search_slice))
+    return search_start + local_peak
 
 
 # ========== 测试代码 ==========
