@@ -39,7 +39,9 @@ from routers.favorite_folder import router as favorite_folder_router
 from routers.favorite_item import router as favorite_item_router
 from routers.videos import router as videos_router
 from database import engine
+from db_models.community_post import CommunityPost
 from db_models.rally_favorite import RallyFavorite
+from sqlalchemy import inspect, text
 from services.action_analysis_repository import save_action_analysis_record
 
 # 配置日志
@@ -159,6 +161,30 @@ async def startup_event():
         logger.info("[OK] 回合收藏数据表已就绪")
     except Exception as e:
         logger.warning(f"[WARN] 回合收藏数据表初始化失败: {e}")
+
+    try:
+        await asyncio.to_thread(
+            CommunityPost.__table__.create,
+            bind=engine,
+            checkfirst=True,
+        )
+
+        def ensure_community_post_title():
+            columns = {
+                column["name"]
+                for column in inspect(engine).get_columns("community_post")
+            }
+            if "title" not in columns:
+                alter_statement = "ALTER TABLE community_post ADD COLUMN title VARCHAR(120) NULL"
+                if engine.dialect.name in {"mysql", "mariadb"}:
+                    alter_statement += " AFTER user_id"
+                with engine.begin() as connection:
+                    connection.execute(text(alter_statement))
+
+        await asyncio.to_thread(ensure_community_post_title)
+        logger.info("[OK] 社区动态标题字段已就绪")
+    except Exception as e:
+        logger.warning(f"[WARN] 社区动态标题字段初始化失败: {e}")
 
     try:
         service = await get_analysis_service()
