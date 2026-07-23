@@ -236,6 +236,54 @@ class TennisAnalysisService:
             if cap is not None:
                 cap.release()
 
+    def _create_segment_media(self, video_path: str, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+        """生成单个动作对应的 H.264 原片和骨架片段。"""
+        segment_id = int(analysis_result.get("shot_id") or 0)
+        frame_start = analysis_result.get("frame_start")
+        frame_end = analysis_result.get("frame_end")
+        media = {
+            "segment_video_url": None,
+            "segment_pose_video_url": None,
+        }
+        if frame_start is None or frame_end is None:
+            return media
+
+        raw_url = self._create_video_clip(
+            video_path,
+            frame_start,
+            frame_end,
+            f"segment_{segment_id}",
+        )
+        media["segment_video_url"] = raw_url
+        if not raw_url:
+            return media
+
+        raw_path = Path(raw_url.lstrip("/"))
+        if not raw_path.exists():
+            return media
+
+        pose_intermediate_url = self._create_pose_overlay_video(str(raw_path))
+        if not pose_intermediate_url:
+            return media
+
+        pose_intermediate_path = Path(pose_intermediate_url.lstrip("/"))
+        try:
+            if pose_intermediate_path.exists():
+                media["segment_pose_video_url"] = self._create_video_clip(
+                    str(pose_intermediate_path),
+                    1,
+                    2_147_483_647,
+                    f"segment_pose_{segment_id}",
+                )
+        finally:
+            if pose_intermediate_path.exists():
+                try:
+                    pose_intermediate_path.unlink()
+                except OSError:
+                    pass
+
+        return media
+
     def _create_pose_overlay_video(self, video_path: str) -> Optional[str]:
         """使用 MediaPipe 在原视频上绘制人体骨骼，并返回可被前端访问的静态 URL。"""
         cap = None
@@ -475,13 +523,25 @@ class TennisAnalysisService:
                         user_annotation=res.get("user_annotation")
                     )
 
-                    coach_advice = None
-                    try:
-                        coach_advice = await self.doubao_service.get_coach_advice(report)
-                        print(f"[服务] 豆包建议(片段{res['shot_id']}): {coach_advice}")
-                    except Exception as e:
-                        print(f"[服务] 豆包调用失败: {e}")
+                    # 建议生成和片段视频生成并行执行，完成后作为同一条结果返回。
+                    advice_result, media_result = await asyncio.gather(
+                        self.doubao_service.get_coach_advice(report),
+                        asyncio.to_thread(self._create_segment_media, temp_video_path, res),
+                        return_exceptions=True,
+                    )
+                    if isinstance(advice_result, Exception):
+                        print(f"[服务] 豆包调用失败: {advice_result}")
                         coach_advice = "建议生成中..."
+                    else:
+                        coach_advice = advice_result or "建议生成中..."
+                        print(f"[服务] 豆包建议(片段{res['shot_id']}): {coach_advice}")
+
+                    if isinstance(media_result, Exception):
+                        print(f"[服务] 片段媒体生成失败: {media_result}")
+                        media_result = {
+                            "segment_video_url": None,
+                            "segment_pose_video_url": None,
+                        }
 
                     phase_dtw = res.get("phase_dtw") or {}
                     standard_file = phase_dtw.get("standard_file")
@@ -513,13 +573,15 @@ class TennisAnalysisService:
                             "impact_frame": res.get("impact_frame"),
                             "time_range": res.get("time_range"),
                             "impact_time": res.get("impact_time"),
+                            "segment_video_url": media_result.get("segment_video_url"),
+                            "segment_pose_video_url": media_result.get("segment_pose_video_url"),
                             "coach_advice": coach_advice
                         }
                     }
 
             thread.join(timeout=5)
 
-            # 推送 summary，并附带后端生成的骨骼可视化回放视频
+            # 推送 summary；逐段媒体已经随每条 segment 返回。
             if "data" in _summary_holder:
                 total_frames = int(_summary_holder["data"].get("num_frames") or 0)
                 if total_frames > 0:
@@ -533,48 +595,6 @@ class TennisAnalysisService:
                     if source_video_url:
                         _summary_holder["data"]["source_video_url"] = source_video_url
 
-                pose_video_url = await asyncio.to_thread(self._create_pose_overlay_video, temp_video_path)
-                if pose_video_url:
-                    _summary_holder["data"]["pose_video_url"] = pose_video_url
-                    _summary_holder["data"]["annotated_video_url"] = pose_video_url
-
-                pose_video_path = None
-                if pose_video_url:
-                    candidate = Path(pose_video_url.lstrip("/"))
-                    if candidate.exists():
-                        pose_video_path = str(candidate)
-
-                segment_media = []
-                for shot in _summary_holder["data"].get("shots", []):
-                    frame_start = shot.get("frame_start")
-                    frame_end = shot.get("frame_end")
-                    if frame_start is None or frame_end is None:
-                        continue
-
-                    segment_id = int(shot.get("shot_id", len(segment_media) + 1))
-                    raw_url = await asyncio.to_thread(
-                        self._create_video_clip,
-                        temp_video_path,
-                        frame_start,
-                        frame_end,
-                        f"segment_{segment_id}",
-                    )
-                    pose_url = None
-                    if pose_video_path:
-                        pose_url = await asyncio.to_thread(
-                            self._create_video_clip,
-                            pose_video_path,
-                            frame_start,
-                            frame_end,
-                            f"segment_pose_{segment_id}",
-                        )
-                    segment_media.append({
-                        "segment_id": segment_id,
-                        "segment_video_url": raw_url,
-                        "segment_pose_video_url": pose_url,
-                    })
-
-                _summary_holder["data"]["segment_media"] = segment_media
                 yield {"type": "summary", "data": _summary_holder["data"]}
 
         except Exception as e:
