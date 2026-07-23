@@ -1,14 +1,16 @@
 from fastapi.responses import JSONResponse
 
 
-def success(data=None, message="成功"):
+def success(data=None, message="成功", **extra):
+    content = {
+        "code": 200,
+        "message": message,
+        "data": data,
+    }
+    content.update(extra)
     return JSONResponse(
         status_code=200,
-        content={
-            "code": 200,
-            "message": message,
-            "data": data,
-        },
+        content=content,
     )
 
 

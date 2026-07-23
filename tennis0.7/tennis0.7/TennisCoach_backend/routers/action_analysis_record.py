@@ -52,43 +52,6 @@ def create_analysis_record(
         return error(f"创建失败：{exc}", code=400)
 
 
-@router.get("/{analysis_id}")
-def get_analysis_record(analysis_id: str, db: Session = Depends(get_db)):
-    try:
-        record = db.query(ActionAnalysisRecord).filter(
-            ActionAnalysisRecord.analysis_id == analysis_id
-        ).first()
-        if not record:
-            return error("记录不存在", code=404)
-        return success(
-            message="查询成功",
-            data={
-                "id": record.id,
-                "analysis_id": record.analysis_id,
-                "user_id": record.user_id,
-                "source_page": record.source_page,
-                "file_name": record.file_name,
-                "selected_player": record.selected_player,
-                "selected_stroke": record.selected_stroke,
-                "detected_shot_type": record.detected_shot_type,
-                "best_match": record.best_match,
-                "grade": record.grade,
-                "distance": record.distance,
-                "training_duration_seconds": record.training_duration_seconds,
-                "segment_count": record.segment_count,
-                "score": record.score,
-                "forehand_score": record.forehand_score,
-                "backhand_score": record.backhand_score,
-                "serve_score": record.serve_score,
-                "status": record.status,
-                "create_time": record.create_time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-        )
-    except Exception as exc:
-        logger.exception("Get analysis record failed")
-        return error(f"查询失败：{exc}", code=400)
-
-
 @router.get("/list")
 def list_analysis_records(
     user_id: int,
@@ -129,6 +92,43 @@ def list_analysis_records(
         )
     except Exception as exc:
         logger.exception("List analysis records failed")
+        return error(f"查询失败：{exc}", code=400)
+
+
+@router.get("/{analysis_id}")
+def get_analysis_record(analysis_id: str, db: Session = Depends(get_db)):
+    try:
+        record = db.query(ActionAnalysisRecord).filter(
+            ActionAnalysisRecord.analysis_id == analysis_id
+        ).first()
+        if not record:
+            return error("记录不存在", code=404)
+        return success(
+            message="查询成功",
+            data={
+                "id": record.id,
+                "analysis_id": record.analysis_id,
+                "user_id": record.user_id,
+                "source_page": record.source_page,
+                "file_name": record.file_name,
+                "selected_player": record.selected_player,
+                "selected_stroke": record.selected_stroke,
+                "detected_shot_type": record.detected_shot_type,
+                "best_match": record.best_match,
+                "grade": record.grade,
+                "distance": record.distance,
+                "training_duration_seconds": record.training_duration_seconds,
+                "segment_count": record.segment_count,
+                "score": record.score,
+                "forehand_score": record.forehand_score,
+                "backhand_score": record.backhand_score,
+                "serve_score": record.serve_score,
+                "status": record.status,
+                "create_time": record.create_time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+    except Exception as exc:
+        logger.exception("Get analysis record failed")
         return error(f"查询失败：{exc}", code=400)
 
 
