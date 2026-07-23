@@ -642,6 +642,9 @@ class TennisAnalysisService:
                     )
                     if source_video_url:
                         _summary_holder["data"]["source_video_url"] = source_video_url
+                        _summary_holder["data"]["source_video_poster_url"] = (
+                            await asyncio.to_thread(self._create_video_poster, source_video_url)
+                        )
 
                 yield {"type": "summary", "data": _summary_holder["data"]}
 
