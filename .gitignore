@@ -121,3 +121,6 @@ uploads/
 
 # Temporary backup files
 *_backup_*.py
+
+# 服务器部署脚本（仅本地使用，不纳入版本控制）
+tennis0.7/tennis0.7/TennisCoach_backend/start.sh
