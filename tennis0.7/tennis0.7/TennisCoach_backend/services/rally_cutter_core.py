@@ -63,6 +63,16 @@ def get_ffmpeg_exe():
         return None
 
 
+def _write_image(path: str, image) -> bool:
+    """使用内存编码写图片，兼容 Windows 中文路径。"""
+    suffix = Path(path).suffix or '.jpg'
+    ok, encoded = cv2.imencode(suffix, image)
+    if not ok:
+        return False
+    Path(path).write_bytes(encoded.tobytes())
+    return True
+
+
 # ══════════════════════════════════════════════════════════════════
 #  1. TrackNet / CourtDetectorNet 网络结构
 #     完全按照 yastrebksv 权重的真实 key 结构对齐：
@@ -298,6 +308,43 @@ def resolve_torch_device(device: str = None) -> str:
     return device
 
 
+def _expand_smoothed_visibility(samples, total_frames: int,
+                                min_stable_samples: int = 2) -> list:
+    """将稀疏球场检测结果去除短毛刺后扩展到逐帧结果。"""
+    if total_frames <= 0:
+        return []
+    if not samples:
+        return [True] * total_frames
+
+    ordered = sorted((int(frame), bool(visible)) for frame, visible in samples)
+    values = [visible for _, visible in ordered]
+    min_stable_samples = max(1, int(min_stable_samples))
+
+    # 只修正夹在相同状态之间的短毛刺，真实的场景切换仍会保留。
+    run_start = 0
+    while run_start < len(values):
+        run_end = run_start + 1
+        while run_end < len(values) and values[run_end] == values[run_start]:
+            run_end += 1
+        if (
+            run_end - run_start < min_stable_samples
+            and run_start > 0
+            and run_end < len(values)
+            and values[run_start - 1] == values[run_end]
+        ):
+            values[run_start:run_end] = [values[run_start - 1]] * (run_end - run_start)
+        run_start = run_end
+
+    expanded = [values[0]] * total_frames
+    for index, (frame, _) in enumerate(ordered):
+        start = max(0, min(total_frames, frame))
+        end = total_frames
+        if index + 1 < len(ordered):
+            end = max(start, min(total_frames, ordered[index + 1][0]))
+        expanded[start:end] = [values[index]] * (end - start)
+    return expanded
+
+
 class BallTracker:
     """
     YOLOv8 球追踪器。
@@ -308,8 +355,7 @@ class BallTracker:
     MAX_MISS = 8   # 最多连续补帧数，超过则标 None
 
     def __init__(self, weights_path: str, device: str = 'auto',
-                 conf: float = 0.25, imgsz: int = 640,
-                 person_weights: str = '', person_conf: float = 0.5):
+                 conf: float = 0.25, imgsz: int = 640):
         from ultralytics import YOLO
         device = resolve_torch_device(device)
         if not os.path.exists(weights_path):
@@ -322,39 +368,6 @@ class BallTracker:
         self.device = device
         self.conf   = conf
         self.imgsz  = imgsz
-        self.person_model = None
-        self.person_conf  = person_conf
-        if person_weights:
-            if not os.path.exists(person_weights):
-                os.makedirs(os.path.dirname(person_weights) or '.', exist_ok=True)
-                url = (f'https://github.com/ultralytics/assets/releases/download'
-                       f'/v0.0.0/{os.path.basename(person_weights)}')
-                print(f'[BallTracker] 下载人员检测模型: {url} → {person_weights}')
-                try:
-                    import urllib.request
-                    urllib.request.urlretrieve(url, person_weights)
-                    print('[BallTracker] 下载完成 ✓')
-                except Exception as e:
-                    print(f'[BallTracker] 下载失败: {e}，尝试 ultralytics 自动下载')
-                    try:
-                        _ = YOLO(os.path.basename(person_weights))
-                        import shutil
-                        src = os.path.join(
-                            os.path.expanduser('~'), '.cache', 'ultralytics',
-                            os.path.basename(person_weights)
-                        )
-                        if os.path.exists(src):
-                            shutil.copy2(src, person_weights)
-                    except Exception as e2:
-                        print(f'[BallTracker] 人员检测模型加载失败: {e2}，跳过')
-                        person_weights = None
-            if person_weights and os.path.exists(person_weights):
-                try:
-                    self.person_model = YOLO(person_weights)
-                    print(f"[BallTracker] 人员检测模型加载完成 ✓  {person_weights}"
-                          f"  conf={person_conf}")
-                except Exception as e:
-                    print(f"[BallTracker] 人员检测模型加载失败: {e}，跳过")
         print(f"[BallTracker] YOLOv8 权重加载完成 ✓  conf={conf}  imgsz={imgsz}")
 
     def predict_stream(self, video_path: str, orig_w: int, orig_h: int,
@@ -367,8 +380,8 @@ class BallTracker:
                        slow_speed_thresh: float = 0,
                        slow_frames_thresh: int = 0,
                        net_reversal_dist_m: float = 1.0,
-                       person_model=None,
-                       person_conf: float = 0.5) -> tuple:
+                       court_sample_stride: int = 10,
+                       court_min_stable_samples: int = 2) -> tuple:
         """
         流式批量推理 + 卡尔曼滤波补帧 + 球场可见性检测。
 
@@ -380,7 +393,9 @@ class BallTracker:
         cap      = cv2.VideoCapture(video_path)
         fps_vid  = cap.get(cv2.CAP_PROP_FPS) or 30.0
         preds         = []
-        court_visible = []
+        court_samples = []
+        last_court_visible = True
+        court_sample_stride = max(1, int(court_sample_stride))
         buf      = []
         buf_frames_orig = []
         buf_idx  = []
@@ -455,13 +470,8 @@ class BallTracker:
               f"{mode_str}  device={self.device}...")
 
         def draw_frame(frame, ball_pos, is_predicted=False, is_out=False, is_slow=False,
-                       person_boxes=None, net_reversal=False):
+                       net_reversal=False):
             out = frame.copy()
-
-            if person_boxes:
-                for pbox in person_boxes:
-                    x1p, y1p, x2p, y2p = [int(v) for v in pbox]
-                    cv2.rectangle(out, (x1p, y1p), (x2p, y2p), (255, 255, 255), 2)
 
             if out_boundary_px:
                 for k in range(4):
@@ -549,12 +559,17 @@ class BallTracker:
             return out
 
         def flush(frames_bgr, frame_indices, frames_orig):
-            nonlocal miss_cnt, consec_out_viz, consec_slow_viz, prev_ball_pos
+            nonlocal miss_cnt, consec_out_viz, consec_slow_viz
+            nonlocal prev_ball_pos, last_court_visible
 
             # ── 球场可见性检测（CourtDetectorNet）────────────────────
-            batch_court_visible = [True] * len(frames_bgr)
+            batch_court_visible = [last_court_visible] * len(frames_bgr)
             if court_net_model is not None:
                 for j_c, f_bgr in enumerate(frames_bgr):
+                    frame_number = frame_indices[j_c]
+                    if frame_number % court_sample_stride != 0:
+                        batch_court_visible[j_c] = last_court_visible
+                        continue
                     inp = cv2.resize(f_bgr, (640, 360))
                     inp = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
                     inp_t = torch.FloatTensor(inp.transpose(2,0,1)).unsqueeze(0)
@@ -563,7 +578,9 @@ class BallTracker:
                     with torch.no_grad():
                         hms = court_net_model(inp_t)[0].cpu().numpy()
                     max_conf = max(hms[ch].max() for ch in range(4))
-                    batch_court_visible[j_c] = max_conf >= court_conf_thresh
+                    last_court_visible = max_conf >= court_conf_thresh
+                    court_samples.append((frame_number, last_court_visible))
+                    batch_court_visible[j_c] = last_court_visible
 
             # ── YOLO 球检测 ───────────────────────────────────────────
             results = self.model.predict(
@@ -574,26 +591,7 @@ class BallTracker:
                 verbose=False,
             )
 
-            # ── 人员检测（可选）────────────────────────────────────────
-            person_boxes_list = [[] for _ in range(len(frames_bgr))]
-            if self.person_model is not None:
-                person_results = self.person_model.predict(
-                    frames_bgr,
-                    conf=self.person_conf,
-                    imgsz=self.imgsz,
-                    device=self.device,
-                    verbose=False,
-                )
-                for j_p, pr in enumerate(person_results):
-                    if pr.boxes is not None and len(pr.boxes) > 0:
-                        for bi in range(len(pr.boxes)):
-                            if int(pr.boxes.cls[bi].item()) == 0:
-                                person_boxes_list[j_p].append(
-                                    pr.boxes.xyxy[bi].cpu().numpy()
-                                )
-
             for j, res in enumerate(results):
-                court_visible.append(batch_court_visible[j])
                 boxes = res.boxes
                 is_pred = False
                 if boxes is not None and len(boxes) > 0:
@@ -614,21 +612,6 @@ class BallTracker:
                     else:
                         preds.append(None)
                         cx, cy = None, None
-
-                # ── 判断球是否在人员检测框 1.5 倍范围内 ──────────────
-                ball_near_person = False
-                if cx is not None and person_boxes_list[j]:
-                    for pbox in person_boxes_list[j]:
-                        x1p, y1p, x2p, y2p = pbox
-                        bw, bh = x2p - x1p, y2p - y1p
-                        cx_box, cy_box = (x1p + x2p) / 2, (y1p + y2p) / 2
-                        x1e = cx_box - bw * 0.75
-                        x2e = cx_box + bw * 0.75
-                        y1e = cy_box - bh * 0.75
-                        y2e = cy_box + bh * 0.75
-                        if x1e <= cx <= x2e and y1e <= cy <= y2e:
-                            ball_near_person = True
-                            break
 
                 # ── 落地/击球/触网检测（对称窗口 + 速度幅度过滤）────────
                 # 修复：原代码用 arr[-1] 作为 y2，导致 vy_after 窗口随 k 变化，
@@ -706,7 +689,7 @@ class BallTracker:
                         ball_is_out = (consec_out_viz >= out_frames_thresh)
                     ball_is_slow = False
                     if ball_pos and slow_speed_thresh > 0 and prev_ball_pos is not None:
-                        if ball_near_person or ball_near_bounce or ball_near_hit:
+                        if ball_near_bounce or ball_near_hit:
                             consec_slow_viz = 0
                         else:
                             speed = np.hypot(ball_pos[0] - prev_ball_pos[0],
@@ -722,9 +705,10 @@ class BallTracker:
                             trail.pop(0)
                     prev_ball_pos = ball_pos
                     orig = frames_orig[j] if frames_orig else frames_bgr[j]
-                    annotated = draw_frame(orig, ball_pos, is_pred, ball_is_out, ball_is_slow,
-                                           person_boxes=person_boxes_list[j],
-                                           net_reversal=ball_net_reversal)
+                    annotated = draw_frame(
+                        orig, ball_pos, is_pred, ball_is_out, ball_is_slow,
+                        net_reversal=ball_net_reversal
+                    )
                     if not batch_court_visible[j]:
                         mask = np.zeros_like(annotated)
                         annotated = cv2.addWeighted(annotated, 0.5, mask, 0.5, 0)
@@ -761,6 +745,11 @@ class BallTracker:
             vw.release()
             print(f"[BallTracker] 可视化视频已保存: {viz_path}")
 
+        court_visible = _expand_smoothed_visibility(
+            court_samples,
+            len(preds),
+            min_stable_samples=court_min_stable_samples,
+        )
         hit = sum(1 for p in preds if p is not None)
         n   = len(preds)
         cv  = sum(1 for v in court_visible if v)
@@ -1233,7 +1222,8 @@ def detect_rallies(pos: list,
                    detect_net_reversal: bool = False,
                    net_reversal_dist_m: float = 1.0,
                    net_reversal_frames: int = 3,
-                   net_use_reversal: bool = False) -> list:
+                   net_use_reversal: bool = False,
+                   min_event_gap_sec: float = 2.0) -> list:
     """
     回合结束检测：连续出界 + 慢速球 + 球网方向反转
 
@@ -1471,6 +1461,21 @@ def detect_rallies(pos: list,
             filtered.append((ef, reason))
             last_ef_type[reason] = ef
 
+    # 不同类型的结束信号也可能在同一次回合结束附近连续触发。
+    # 使用全局冷却合并这些信号，避免把一个回合切成多个一两秒的小片段。
+    min_event_gap_frames = max(min_fr, int(max(0.0, min_event_gap_sec) * fps))
+    coalesced = []
+    for ef, reason in filtered:
+        if coalesced and ef - coalesced[-1][0] <= min_event_gap_frames:
+            continue
+        coalesced.append((ef, reason))
+    if len(coalesced) != len(filtered):
+        print(
+            f'[Segmenter] 合并临近结束信号: {len(filtered)} → {len(coalesced)} '
+            f'(间隔≤{min_event_gap_frames / fps:.1f}s)'
+        )
+    filtered = coalesced
+
     out_cnt  = sum(1 for _, r in filtered if 'out' in r)
     slow_cnt = sum(1 for _, r in filtered if r == 'slow')
     net_cnt  = sum(1 for _, r in filtered if r == 'net_reversal')
@@ -1498,9 +1503,9 @@ def detect_rallies(pos: list,
             rallies.append((s, e))
             print(f'  回合{len(rallies):03d}: 帧{s}~{e}  '
                   f'({s/fps:.1f}s~{e/fps:.1f}s)  [{reason}]')
+            prev_end = e + 1
         else:
             print(f'  跳过过短片段({reason}): {(e-s)/fps:.1f}s < {min_sec}s')
-        prev_end = e + 1
 
     print(f'[Segmenter] 共 {len(rallies)} 个回合')
     return rallies
@@ -1522,15 +1527,13 @@ def cut_video(video: str, rallies: list, outdir: str, fps: float,
         print('[Cut] 无法打开视频')
         return
 
-    # 修复：在进入循环前保存视频宽高，防止被内部变量覆盖
     vid_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     vid_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    ffmpeg_exe = get_ffmpeg_exe()
 
     for i, (s, e) in enumerate(rallies):
         out_path = os.path.join(outdir, f'rally_{i+1:03d}.mp4')
-        raw_path = out_path.replace('.mp4', '_raw.mp4')
-        vw = cv2.VideoWriter(raw_path, fourcc, fps, (vid_w, vid_h))
+        thumb_path = out_path.replace('.mp4', '.jpg')
         n_frames = e - s + 1
 
         # ── Step A：检测落点（结果用于慢速门控，不再做视觉显示）────
@@ -1582,77 +1585,82 @@ def cut_video(video: str, rallies: list, outdir: str, fps: float,
             prev_p = p
 
         # ── 逐帧标注写出 ──────────────────────────────────────────
-        cap.set(cv2.CAP_PROP_POS_FRAMES, s)
-        for j in range(n_frames):
-            ret, frame = cap.read()
-            if not ret:
-                break
-            out = frame.copy()
-            p = positions[s + j] if positions and s + j < len(positions) else None
+        def render_segment(write_frame, save_thumbnail=True):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, s)
+            written = 0
+            for j in range(n_frames):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                out = frame.copy()
+                p = positions[s + j] if positions and s + j < len(positions) else None
 
-            # 轨迹拖尾（绿→黄渐变 / 紫慢速 / 红出界）
-            trail_start = max(0, j - trail_len)
-            for tj in range(trail_start, j):
-                tp = positions[s + tj] if positions and s + tj < len(positions) else None
-                if tp is None:
-                    continue
-                alpha = (tj - trail_start + 1) / (j - trail_start + 1)
-                if is_out_arr[tj]:
-                    color_t = (0, 0, 255)
-                elif is_slow_arr[tj]:
-                    color_t = (255, 0, 255)
-                else:
-                    r = int(255 * alpha)
-                    g = int(255 * (1 - alpha * 0.5))
-                    color_t = (0, g, r)
-                radius = max(2, int(4 * alpha))
-                cv2.circle(out, (int(tp[0]), int(tp[1])), radius, color_t, -1)
+                trail_start = max(0, j - trail_len)
+                for tj in range(trail_start, j):
+                    tp = positions[s + tj] if positions and s + tj < len(positions) else None
+                    if tp is None:
+                        continue
+                    alpha = (tj - trail_start + 1) / (j - trail_start + 1)
+                    if is_out_arr[tj]:
+                        color_t = (0, 0, 255)
+                    elif is_slow_arr[tj]:
+                        color_t = (255, 0, 255)
+                    else:
+                        r = int(255 * alpha)
+                        g = int(255 * (1 - alpha * 0.5))
+                        color_t = (0, g, r)
+                    radius = max(2, int(4 * alpha))
+                    cv2.circle(out, (int(tp[0]), int(tp[1])), radius, color_t, -1)
 
-            # 当前球位置（绿点 + 白圈）
-            if p is not None:
-                bx, by = int(p[0]), int(p[1])
-                cv2.circle(out, (bx, by), 6, (0, 255, 0), -1)
-                cv2.circle(out, (bx, by), 9, (255, 255, 255), 1)
+                if p is not None:
+                    bx, by = int(p[0]), int(p[1])
+                    cv2.circle(out, (bx, by), 6, (0, 255, 0), -1)
+                    cv2.circle(out, (bx, by), 9, (255, 255, 255), 1)
 
-            vw.write(out)
+                if save_thumbnail and written == 0:
+                    _write_image(thumb_path, out)
+                write_frame(out)
+                written += 1
+            return written
 
-        vw.release()
-
-        # ffmpeg 重编码为 H.264，确保浏览器可播放
-        ffmpeg_exe = get_ffmpeg_exe()
+        encoded = False
         if ffmpeg_exe:
+            command = [
+                ffmpeg_exe, '-y',
+                '-f', 'rawvideo', '-vcodec', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{vid_w}x{vid_h}',
+                '-r', f'{fps:.6f}',
+                '-i', '-', '-an',
+                '-c:v', 'libx264', '-preset', 'veryfast',
+                '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+                out_path,
+            ]
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             try:
-                subprocess.run([
-                    ffmpeg_exe, '-y', '-i', raw_path,
-                    '-c:v', 'libx264', '-preset', 'fast',
-                    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-                    out_path
-                ], capture_output=True, check=True)
-                os.unlink(raw_path)
-            except Exception as exc:
-                print(f'[Cut] H.264 重编码失败，保留原始 mp4: {exc}')
-                os.replace(raw_path, out_path)
-        else:
-            print('[Cut] 未找到 ffmpeg，输出视频可能无法在浏览器播放。请安装 ffmpeg 或 imageio-ffmpeg。')
-            os.replace(raw_path, out_path)
+                render_segment(lambda frame: process.stdin.write(frame.tobytes()))
+                process.stdin.close()
+                encoded = process.wait() == 0
+            except (BrokenPipeError, OSError):
+                if process.stdin and not process.stdin.closed:
+                    process.stdin.close()
+                process.wait()
 
-        # 提取第一帧作为缩略图
-        thumb_path = out_path.replace('.mp4', '.jpg')
-        try:
-            if not ffmpeg_exe:
-                raise RuntimeError('ffmpeg not found')
-            subprocess.run([
-                ffmpeg_exe, '-y', '-i', out_path,
-                '-vframes', '1', '-q:v', '2', thumb_path
-            ], capture_output=True, check=True)
-        except Exception:
-            thumb_cap = cv2.VideoCapture(out_path)
-            try:
-                ret, thumb = thumb_cap.read()
-                if ret:
-                    cv2.imwrite(thumb_path, thumb)
-            finally:
-                thumb_cap.release()
+        if not encoded:
+            if os.path.exists(out_path):
+                os.unlink(out_path)
+            raw_path = out_path.replace('.mp4', '_raw.mp4')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            writer = cv2.VideoWriter(raw_path, fourcc, fps, (vid_w, vid_h))
+            render_segment(writer.write, save_thumbnail=not os.path.exists(thumb_path))
+            writer.release()
+            os.replace(raw_path, out_path)
+            print('[Cut] FFmpeg 单次编码不可用，已回退到 OpenCV mp4v。')
 
         ss = s / fps
         print(f'  ✅ rally_{i+1:03d}.mp4  {ss:.1f}s~{ss + (e-s)/fps:.1f}s  ({n_frames}帧)')
@@ -1706,10 +1714,6 @@ def main():
                     help='慢速球触发回合结束的持续时间（秒），默认 0.3')
     pa.add_argument('--no-slow',        action='store_true',
                     help='关闭慢速球检测（默认开启）')
-    pa.add_argument('--person_weights', default='weights/yolov8n.pt',
-                    help='人员检测模型权重（如 weights/yolov8n.pt），设为空字符串则关闭')
-    pa.add_argument('--person_conf',    type=float, default=0.5,
-                    help='人员检测置信度阈值，默认 0.5')
     pa.add_argument('--net',            action='store_true',
                     help='使用方向反转+能量衰减模式检测触网（否则用慢速+5m）')
     pa.add_argument('--no-net-reversal', action='store_true',
@@ -1761,9 +1765,7 @@ def main():
     cap.release()
     print(f'\n[Step 2+3] 流式读帧 + YOLOv8 球追踪')
     try:
-        tracker = BallTracker(args.ball_weights, args.device,
-                              person_weights=args.person_weights,
-                              person_conf=args.person_conf)
+        tracker = BallTracker(args.ball_weights, args.device)
     except FileNotFoundError as e:
         print(f'[错误] {e}')
         return
@@ -1789,7 +1791,6 @@ def main():
         slow_speed_thresh=args.slow_speed if not getattr(args, 'no_slow', False) else 0,
         slow_frames_thresh=slow_frames,
         net_reversal_dist_m=args.net_reversal_dist,
-        person_conf=args.person_conf,
     )
 
     # ── Step 4: 回合边界检测 ─────────────────────────────────────
@@ -1839,8 +1840,6 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
                      slow_speed: float = 3.0,
                      slow_sec: float = 0.3,
                      no_slow: bool = False,
-                     person_weights: str = 'weights/yolov8n.pt',
-                     person_conf: float = 0.5,
                      net: bool = False,
                      no_net_reversal: bool = False,
                      net_reversal_dist: float = 4.0,
@@ -1875,8 +1874,6 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
     a.slow_speed = slow_speed
     a.slow_sec = slow_sec
     a.no_slow = no_slow
-    a.person_weights = person_weights
-    a.person_conf = person_conf
     a.net = net
     a.no_net_reversal = no_net_reversal
     a.net_reversal_dist = net_reversal_dist
@@ -1920,15 +1917,13 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
             raise RuntimeError('无法读取标定帧')
         if not court.calibrate(frame, allow_manual=args.allow_manual_calibration):
             cap.release()
-            raise RuntimeError('NEED_CALIBRATION: 请在前端依次标记球场四个角点')
+            raise RuntimeError('COURT_DETECTION_FAILED: 自动球场识别失败，请选择球场边线清晰且画面稳定的视频')
         court.save(args.calib)
 
     cap.release()
     print(f'\n[Step 2+3] 流式读帧 + YOLOv8 球追踪')
     try:
-        tracker = BallTracker(args.ball_weights, args.device,
-                              person_weights=args.person_weights,
-                              person_conf=args.person_conf)
+        tracker = BallTracker(args.ball_weights, args.device)
     except FileNotFoundError as e:
         raise RuntimeError(str(e))
     viz_path = args.viz if args.viz else None
@@ -1945,7 +1940,6 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
         print(f'  慢速球判定: 速度<{args.slow_speed}  '
               f'持续 {slow_frames} 帧 ({args.slow_sec}s)')
 
-    person_model = tracker.person_model if hasattr(tracker, 'person_model') else None
     positions, court_visible = tracker.predict_stream(
         args.video, W, H_v, total,
         court=court,
@@ -1956,8 +1950,6 @@ def run_cut_pipeline(video_path: str, output_dir: str = 'output_rallies',
         slow_speed_thresh=args.slow_speed if not getattr(args, 'no_slow', False) else 0,
         slow_frames_thresh=slow_frames,
         net_reversal_dist_m=args.net_reversal_dist,
-        person_model=person_model,
-        person_conf=args.person_conf,
     )
 
     print('\n[Step 4] 出界检测 + 回合边界')
