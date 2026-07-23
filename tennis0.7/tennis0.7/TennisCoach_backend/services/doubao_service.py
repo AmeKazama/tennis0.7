@@ -2,7 +2,6 @@ import httpx
 import json
 import asyncio
 import logging
-import random
 
 logger = logging.getLogger(__name__)
 
@@ -155,52 +154,6 @@ class DoubaoService:
 service = DoubaoService()
 
 
-async def get_fitness_advice(joint_data: dict):
-    """
-    根据关节角度生成 Prompt 并获取 AI 教练建议（实时模式）
-    """
-    lk = joint_data.get('left_knee', 180)
-    rk = joint_data.get('right_knee', 180)
-    le = joint_data.get('left_elbow', 180)
-    re = joint_data.get('right_elbow', 180)
-
-    issues = []
-    if lk < 90:
-        issues.append("左膝弯曲过度")
-    if rk < 90:
-        issues.append("右膝弯曲过度")
-    if le < 120:
-        issues.append("左肘位置过低")
-    if re < 120:
-        issues.append("右肘位置过低")
-    if lk > 160 and rk > 160:
-        issues.append("膝盖过于伸直")
-
-    random.seed(lk * 1000 + rk * 100 + le * 10 + re)
-    extra_words = ["请注意", "建议", "记得", "尝试", "试着", "要注意", "请保持", "保持住"]
-    random_word = random.choice(extra_words)
-
-    if issues:
-        issue_desc = "、".join(issues)
-        prompt = (
-            f"学员网球姿势问题：{issue_desc}。"
-            f"当前角度：左膝{lk}°，右膝{rk}°，左肘{le}°，右肘{re}°。"
-            f"请针对这个具体角度给出纠正建议，{random_word}用不一样的说法！"
-        )
-    else:
-        prompt = (
-            f"学员网球姿势：左膝{lk}°，右膝{rk}°，左肘{le}°，右肘{re}°。"
-            f"姿势不错，请给予鼓励和小建议，{random_word}用不一样的说法！"
-        )
-
-    advice = await service.chat_with_doubao(prompt, is_analysis_report=False)
-
-    if advice is None:
-        return "重心过低，请注意膝盖负担！"
-
-    return advice.strip()
-
-
 async def get_video_analysis_advice(analysis_prompt: str):
     """
     根据视频分析报告获取教练建议（视频分析模式）
@@ -229,19 +182,7 @@ if __name__ == "__main__":
     async def test():
         print("🚀 测试豆包服务...\n")
 
-        # 测试1: 实时姿态监控
-        print("【测试1】实时姿态监控模式")
-        test_data = {
-            "left_elbow": 155,
-            "right_elbow": 158,
-            "left_knee": 75,
-            "right_knee": 82
-        }
-        advice1 = await get_fitness_advice(test_data)
-        print(f"实时建议: {advice1}\n")
-
-        # 测试2: 视频分析报告
-        print("【测试2】视频分析报告模式")
+        print("【测试】视频分析报告模式")
         analysis_report = """
 【动作分析报告】
 动作类型: 正手

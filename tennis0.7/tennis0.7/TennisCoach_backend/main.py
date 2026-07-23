@@ -1,13 +1,11 @@
-import time
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-import time
 import asyncio
 import json
 import traceback
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, HTTPException, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 # 导入服务
 try:
-    from services.doubao_service import get_fitness_advice, get_video_analysis_advice
     from services.tennis_analysis_service import get_analysis_service
 
     logger.info("[OK] 成功加载所有服务")
@@ -55,12 +52,6 @@ except ImportError as e:
     logger.error(f"[ERROR] 服务加载失败: {e}")
 
     # 降级处理
-    async def get_fitness_advice(data):
-        return "本地模拟：请注意重心稳定"
-
-    async def get_video_analysis_advice(prompt):
-        return "本地模拟：动作需要调整"
-
     async def get_analysis_service():
         raise RuntimeError("分析服务未加载")
 
@@ -150,16 +141,6 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.mount("/output_rallies", StaticFiles(directory="output_rallies"), name="output_rallies")
 register_feed_static(app)
 register_tts_static(app)
-
-
-# 全局配置
-ADVICE_COOLDOWN = 15.0
-ANGLE_CHANGE_THRESHOLD = 5
-last_advice_time = 0
-last_angles = {"left_knee": 180, "right_knee": 180}
-cached_advice = "教练已就绪，请开始动作"
-advice_source = "初始"
-AI_SEMAPHORE = asyncio.Semaphore(1)
 
 
 @app.on_event("startup")
@@ -378,89 +359,6 @@ async def analyze_video_json(file: UploadFile = File(...)):
         logger.error(f"[ERROR] JSON视频分析失败: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"视频分析失败: {str(e)}")
-
-
-@app.websocket("/ws/joints")
-async def websocket_endpoint(websocket: WebSocket):
-    """
-    实时姿态监控 WebSocket 接口
-    """
-    global last_advice_time, cached_advice, last_angles, advice_source
-
-    await websocket.accept()
-    logger.info(f"[WebSocket] 客户端已连接: {websocket.client.host}")
-
-    try:
-        while True:
-            try:
-                raw_data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-            except asyncio.TimeoutError:
-                continue
-            except Exception as e:
-                logger.warning(f"[WARN] 数据接收失败: {e}")
-                break
-
-            le = raw_data.get("left_elbow", 180)
-            re = raw_data.get("right_elbow", 180)
-            lk = raw_data.get("left_knee", 180)
-            rk = raw_data.get("right_knee", 180)
-
-            now = time.time()
-            current_tts = True
-
-            knee_abnormal = (lk < 90 or rk < 90)
-            cooldown_passed = (now - last_advice_time > ADVICE_COOLDOWN)
-            angle_changed = (
-                abs(lk - last_angles["left_knee"]) > ANGLE_CHANGE_THRESHOLD
-                or abs(rk - last_angles["right_knee"]) > ANGLE_CHANGE_THRESHOLD
-            )
-
-            if cooldown_passed and (knee_abnormal or angle_changed):
-                real_advice = None
-                retry_count = 0
-
-                while retry_count < 4 and real_advice is None:
-                    try:
-                        async with AI_SEMAPHORE:
-                            real_advice = await asyncio.wait_for(
-                                get_fitness_advice(raw_data),
-                                timeout=45.0
-                            )
-                    except asyncio.TimeoutError:
-                        retry_count += 1
-                    except Exception:
-                        retry_count += 1
-
-                if real_advice and "失败" not in real_advice and "异常" not in real_advice:
-                    cached_advice = real_advice
-                    current_tts = True
-                    last_advice_time = now
-                    last_angles = {
-                        "left_knee": lk,
-                        "right_knee": rk
-                    }
-                    advice_source = "豆包"
-
-            response_payload = {
-                "left_elbow": le,
-                "right_elbow": re,
-                "left_knee": lk,
-                "right_knee": rk,
-                "content": str(cached_advice),
-                "tts": current_tts,
-                "source": advice_source,
-                "timestamp": now
-            }
-
-            try:
-                await websocket.send_json(response_payload)
-            except WebSocketDisconnect:
-                break
-
-    except WebSocketDisconnect:
-        logger.info("[WebSocket] 连接断开")
-    except Exception as e:
-        logger.error(f"[ERROR] WebSocket 异常: {e}")
 
 
 @app.get("/health")

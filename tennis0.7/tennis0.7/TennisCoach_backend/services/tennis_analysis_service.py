@@ -58,7 +58,6 @@ class TennisAnalysisService:
         self.model = None
         self.doubao_service = None
         self.yolo_detector = None
-        self.pose_video_cache = {}
 
     async def initialize(self):
         """异步初始化（加载模型和豆包服务）"""
@@ -82,30 +81,6 @@ class TennisAnalysisService:
             except Exception as e:
                 print(f"[服务] YOLO 初始化失败，降级到纯关键点检测: {e}")
                 self.yolo_detector = None
-
-    def _find_standard_video_path(self, standard_file: Optional[str]) -> Optional[str]:
-        """根据 *_final.json 标准库文件找到同名 mp4 标准视频。"""
-        if not standard_file:
-            return None
-
-        json_path = Path(standard_file)
-        if not json_path.is_absolute():
-            json_path = Path(__file__).resolve().parents[3] / standard_file
-
-        candidates = []
-        if json_path.name.endswith("_final.json"):
-            base = json_path.with_name(json_path.name.replace("_final.json", ""))
-            candidates.extend([base.with_suffix(".mp4"), base.with_suffix(".mov"), base.with_suffix(".avi")])
-        candidates.extend([
-            json_path.with_suffix(".mp4"),
-            json_path.with_suffix(".mov"),
-            json_path.with_suffix(".avi"),
-        ])
-
-        for candidate in candidates:
-            if candidate.exists():
-                return str(candidate)
-        return None
 
     def _load_standard_annotation(self, standard_file: Optional[str]) -> Optional[Dict[str, Any]]:
         """读取最佳匹配标准动作的 final.json，返回 segment_range/fps 等播放区间信息。"""
@@ -134,18 +109,6 @@ class TennisAnalysisService:
         except Exception as e:
             print(f"[服务] 标准动作标注读取失败: {e}")
             return None
-    async def _get_pose_video_url(self, video_path: Optional[str]) -> Optional[str]:
-        """生成并缓存某个视频的 MediaPipe 骨骼回放 URL。"""
-        if not video_path:
-            return None
-        key = str(Path(video_path).resolve())
-        if key in self.pose_video_cache:
-            return self.pose_video_cache[key]
-        url = await asyncio.to_thread(self._create_pose_overlay_video, key)
-        if url:
-            self.pose_video_cache[key] = url
-        return url
-
     def _find_pose_landmarker_model(self) -> Optional[Path]:
         """Find the MediaPipe Tasks pose landmarker model file."""
         env_path = os.getenv("MEDIAPIPE_POSE_MODEL")
@@ -199,6 +162,79 @@ class TennisAnalysisService:
         for point in points:
             if point is not None:
                 cv2.circle(frame, point, 4, (120, 255, 220), -1)
+
+    def _create_video_clip(
+        self,
+        video_path: str,
+        frame_start: int,
+        frame_end: int,
+        prefix: str,
+    ) -> Optional[str]:
+        """按分析帧范围生成 H.264 片段，确保浏览器和手机端可以直接播放。"""
+        import cv2
+        import subprocess
+        import imageio_ffmpeg
+
+        cap = None
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                return None
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            start = max(1, int(frame_start))
+            end = max(start, int(frame_end))
+            if total_frames > 0:
+                end = min(end, total_frames)
+
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+            start_seconds = max(0.0, (start - 1) / fps)
+            duration_seconds = max(1.0 / fps, (end - start + 1) / fps)
+            cap.release()
+            cap = None
+
+            output_dir = Path("uploads") / "action_analysis"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_name = f"{prefix}_{uuid.uuid4().hex}.mp4"
+            output_path = output_dir / output_name
+
+            command = [
+                imageio_ffmpeg.get_ffmpeg_exe(),
+                "-y",
+                "-ss", f"{start_seconds:.6f}",
+                "-i", str(video_path),
+                "-t", f"{duration_seconds:.6f}",
+                "-map", "0:v:0",
+                "-map", "0:a?",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-movflags", "+faststart",
+                "-avoid_negative_ts", "make_zero",
+                str(output_path),
+            ]
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(60, int(duration_seconds * 8)),
+                check=False,
+            )
+            if result.returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
+                error_tail = (result.stderr or "")[-500:]
+                print(f"[服务] FFmpeg 切片失败: {error_tail}")
+                return None
+
+            return f"/uploads/action_analysis/{output_name}"
+        except Exception as e:
+            print(f"[服务] 视频片段生成失败: {e}")
+            return None
+        finally:
+            if cap is not None:
+                cap.release()
 
     def _create_pose_overlay_video(self, video_path: str) -> Optional[str]:
         """使用 MediaPipe 在原视频上绘制人体骨骼，并返回可被前端访问的静态 URL。"""
@@ -390,12 +426,13 @@ class TennisAnalysisService:
                         service_mode=True,
                         on_shot_ready=on_shot_ready,
                     )
+                    service_results = list(skeleton_recorder.service_results)
                     _summary_holder["data"] = {
-                        "num_segments": len(shot_counter.results),
+                        "num_segments": len(service_results),
                         "num_frames": total_frames,
                         "fps": fps,
                         "duration": total_frames / fps,
-                        "shots": shot_counter.results
+                        "shots": service_results
                     }
                 except Exception as e:
                     import traceback
@@ -449,8 +486,6 @@ class TennisAnalysisService:
                     phase_dtw = res.get("phase_dtw") or {}
                     standard_file = phase_dtw.get("standard_file")
                     standard_annotation = self._load_standard_annotation(standard_file)
-                    standard_video_path = self._find_standard_video_path(standard_file)
-                    standard_pose_video_url = await self._get_pose_video_url(standard_video_path)
 
                     yield {
                         "type": "segment",
@@ -472,10 +507,12 @@ class TennisAnalysisService:
                             },
                             "best_match": res.get("best_match"),
                             "standard_file": standard_file,
-                            "standard_video_path": standard_video_path,
                             "standard_annotation": standard_annotation,
-                            "standard_pose_video_url": standard_pose_video_url,
-                            "standard_annotated_video_url": standard_pose_video_url,
+                            "frame_start": res.get("frame_start"),
+                            "frame_end": res.get("frame_end"),
+                            "impact_frame": res.get("impact_frame"),
+                            "time_range": res.get("time_range"),
+                            "impact_time": res.get("impact_time"),
                             "coach_advice": coach_advice
                         }
                     }
@@ -484,10 +521,60 @@ class TennisAnalysisService:
 
             # 推送 summary，并附带后端生成的骨骼可视化回放视频
             if "data" in _summary_holder:
+                total_frames = int(_summary_holder["data"].get("num_frames") or 0)
+                if total_frames > 0:
+                    source_video_url = await asyncio.to_thread(
+                        self._create_video_clip,
+                        temp_video_path,
+                        1,
+                        total_frames,
+                        "source_video",
+                    )
+                    if source_video_url:
+                        _summary_holder["data"]["source_video_url"] = source_video_url
+
                 pose_video_url = await asyncio.to_thread(self._create_pose_overlay_video, temp_video_path)
                 if pose_video_url:
                     _summary_holder["data"]["pose_video_url"] = pose_video_url
                     _summary_holder["data"]["annotated_video_url"] = pose_video_url
+
+                pose_video_path = None
+                if pose_video_url:
+                    candidate = Path(pose_video_url.lstrip("/"))
+                    if candidate.exists():
+                        pose_video_path = str(candidate)
+
+                segment_media = []
+                for shot in _summary_holder["data"].get("shots", []):
+                    frame_start = shot.get("frame_start")
+                    frame_end = shot.get("frame_end")
+                    if frame_start is None or frame_end is None:
+                        continue
+
+                    segment_id = int(shot.get("shot_id", len(segment_media) + 1))
+                    raw_url = await asyncio.to_thread(
+                        self._create_video_clip,
+                        temp_video_path,
+                        frame_start,
+                        frame_end,
+                        f"segment_{segment_id}",
+                    )
+                    pose_url = None
+                    if pose_video_path:
+                        pose_url = await asyncio.to_thread(
+                            self._create_video_clip,
+                            pose_video_path,
+                            frame_start,
+                            frame_end,
+                            f"segment_pose_{segment_id}",
+                        )
+                    segment_media.append({
+                        "segment_id": segment_id,
+                        "segment_video_url": raw_url,
+                        "segment_pose_video_url": pose_url,
+                    })
+
+                _summary_holder["data"]["segment_media"] = segment_media
                 yield {"type": "summary", "data": _summary_holder["data"]}
 
         except Exception as e:

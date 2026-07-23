@@ -1153,6 +1153,19 @@ class SkeletonRecorder:
             impact_frame_id=impact_frame_id,
         )
         if analysis is not None:
+            frame_start = int(window[0][0])
+            frame_end = int(window[-1][0])
+            fps = float(self.video_fps or 30.0)
+            analysis.update({
+                "frame_start": frame_start,
+                "frame_end": frame_end,
+                "impact_frame": int(impact_frame_id or peak_frame_id),
+                "time_range": [
+                    max(0.0, (frame_start - 1) / fps),
+                    max(0.0, frame_end / fps),
+                ],
+                "impact_time": max(0.0, ((impact_frame_id or peak_frame_id) - 1) / fps),
+            })
             self.service_results.append(analysis)
             # 立刻触发回调，实现分出一段推送一段
             if self._on_shot_ready is not None:
