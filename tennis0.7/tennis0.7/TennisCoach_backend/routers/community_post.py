@@ -45,6 +45,46 @@ def create_post(
         return error(f"发布失败：{exc}", code=400)
 
 
+@router.get("/list")
+def list_posts(
+    user_id: Optional[int] = None,
+    status: Optional[str] = "published",
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    try:
+        query = db.query(CommunityPost)
+        if user_id:
+            query = query.filter(CommunityPost.user_id == user_id)
+        if status:
+            query = query.filter(CommunityPost.status == status)
+        posts = query.order_by(
+            CommunityPost.create_time.desc()
+        ).offset((page - 1) * size).limit(size).all()
+        return success(
+            message="查询成功",
+            data=[
+                {
+                    "id": p.id,
+                    "user_id": p.user_id,
+                    "content": p.content,
+                    "media_type": p.media_type,
+                    "media_url": p.media_url,
+                    "cover_url": p.cover_url,
+                    "like_count": p.like_count,
+                    "comment_count": p.comment_count,
+                    "favorite_count": p.favorite_count,
+                    "create_time": p.create_time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                for p in posts
+            ]
+        )
+    except Exception as exc:
+        logger.exception("List posts failed")
+        return error(f"查询失败：{exc}", code=400)
+
+
 @router.get("/{post_id}")
 def get_post(post_id: int, db: Session = Depends(get_db)):
     try:
@@ -70,50 +110,6 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
         )
     except Exception as exc:
         logger.exception("Get post failed")
-        return error(f"查询失败：{exc}", code=400)
-
-
-@router.get("/list")
-def list_posts(
-    user_id: Optional[int] = None,
-    status: Optional[str] = "published",
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
-    try:
-        query = db.query(CommunityPost)
-        if user_id:
-            query = query.filter(CommunityPost.user_id == user_id)
-        if status:
-            query = query.filter(CommunityPost.status == status)
-        total = query.count()
-        posts = query.order_by(
-            CommunityPost.create_time.desc()
-        ).offset((page - 1) * size).limit(size).all()
-        return success(
-            message="查询成功",
-            data=[
-                {
-                    "id": p.id,
-                    "user_id": p.user_id,
-                    "content": p.content,
-                    "media_type": p.media_type,
-                    "media_url": p.media_url,
-                    "cover_url": p.cover_url,
-                    "like_count": p.like_count,
-                    "comment_count": p.comment_count,
-                    "favorite_count": p.favorite_count,
-                    "create_time": p.create_time.strftime("%Y-%m-%d %H:%M:%S")
-                }
-                for p in posts
-            ],
-            total=total,
-            page=page,
-            size=size
-        )
-    except Exception as exc:
-        logger.exception("List posts failed")
         return error(f"查询失败：{exc}", code=400)
 
 
