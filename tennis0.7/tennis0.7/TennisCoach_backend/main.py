@@ -224,7 +224,10 @@ async def analyze_video_submit(
 
         try:
             service = await get_analysis_service()
-            async for chunk in service.analyze_video_stream(video_bytes):
+            async for chunk in service.analyze_video_stream(
+                video_bytes,
+                selected_stroke=selected_stroke,
+            ):
                 _task_items[task_id].append(chunk)
 
                 chunk_type = chunk.get("type")
