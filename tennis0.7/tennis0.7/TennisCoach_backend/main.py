@@ -23,6 +23,7 @@ load_dotenv()
 from routers.diary import router as diary_router
 from routers.feed import register_feed_static, router as feed_router
 from routers.rally_cut import router as rally_router
+from routers.rally_favorite import router as rally_favorite_router
 from routers.tts import register_tts_static, router as tts_router
 from routers.user_profile import router as user_profile_router
 from routers.user_follow import router as user_follow_router
@@ -37,6 +38,8 @@ from routers.community_post import router as community_post_router
 from routers.favorite_folder import router as favorite_folder_router
 from routers.favorite_item import router as favorite_item_router
 from routers.videos import router as videos_router
+from database import engine
+from db_models.rally_favorite import RallyFavorite
 from services.action_analysis_repository import save_action_analysis_record
 
 # 配置日志
@@ -103,6 +106,8 @@ async def options_preflight(full_path: str):
 app.include_router(diary_router)
 # 注册回合切割接口
 app.include_router(rally_router)
+# 回合收藏接口
+app.include_router(rally_favorite_router)
 # 注册首页视频流接口
 app.include_router(feed_router)
 # 注册文字转语音接口
@@ -145,6 +150,16 @@ register_tts_static(app)
 
 @app.on_event("startup")
 async def startup_event():
+    try:
+        await asyncio.to_thread(
+            RallyFavorite.__table__.create,
+            bind=engine,
+            checkfirst=True,
+        )
+        logger.info("[OK] 回合收藏数据表已就绪")
+    except Exception as e:
+        logger.warning(f"[WARN] 回合收藏数据表初始化失败: {e}")
+
     try:
         service = await get_analysis_service()
         logger.info("[OK] 视频分析服务已初始化")
