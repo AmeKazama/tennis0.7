@@ -236,6 +236,45 @@ class TennisAnalysisService:
             if cap is not None:
                 cap.release()
 
+    def _create_video_poster(self, video_url: Optional[str]) -> Optional[str]:
+        """提取视频第一帧为 JPEG，供前端在播放前显示封面。"""
+        if not video_url:
+            return None
+
+        import cv2
+
+        video_path = Path(video_url.lstrip("/"))
+        if not video_path.exists():
+            return None
+
+        poster_path = video_path.with_suffix(".jpg")
+        cap = None
+        try:
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                return None
+
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                return None
+
+            encoded, buffer = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), 88],
+            )
+            if not encoded:
+                return None
+
+            poster_path.write_bytes(buffer.tobytes())
+            return f"/{poster_path.as_posix()}"
+        except Exception as e:
+            print(f"[服务] 视频首帧封面生成失败: {e}")
+            return None
+        finally:
+            if cap is not None:
+                cap.release()
+
     def _create_segment_media(self, video_path: str, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
         """生成单个动作对应的 H.264 原片和骨架片段。"""
         segment_id = int(analysis_result.get("shot_id") or 0)
@@ -244,6 +283,8 @@ class TennisAnalysisService:
         media = {
             "segment_video_url": None,
             "segment_pose_video_url": None,
+            "segment_video_poster_url": None,
+            "segment_pose_video_poster_url": None,
         }
         if frame_start is None or frame_end is None:
             return media
@@ -255,6 +296,7 @@ class TennisAnalysisService:
             f"segment_{segment_id}",
         )
         media["segment_video_url"] = raw_url
+        media["segment_video_poster_url"] = self._create_video_poster(raw_url)
         if not raw_url:
             return media
 
@@ -269,12 +311,14 @@ class TennisAnalysisService:
         pose_intermediate_path = Path(pose_intermediate_url.lstrip("/"))
         try:
             if pose_intermediate_path.exists():
-                media["segment_pose_video_url"] = self._create_video_clip(
+                pose_url = self._create_video_clip(
                     str(pose_intermediate_path),
                     1,
                     2_147_483_647,
                     f"segment_pose_{segment_id}",
                 )
+                media["segment_pose_video_url"] = pose_url
+                media["segment_pose_video_poster_url"] = self._create_video_poster(pose_url)
         finally:
             if pose_intermediate_path.exists():
                 try:
@@ -541,6 +585,8 @@ class TennisAnalysisService:
                         media_result = {
                             "segment_video_url": None,
                             "segment_pose_video_url": None,
+                            "segment_video_poster_url": None,
+                            "segment_pose_video_poster_url": None,
                         }
 
                     phase_dtw = res.get("phase_dtw") or {}
@@ -575,6 +621,8 @@ class TennisAnalysisService:
                             "impact_time": res.get("impact_time"),
                             "segment_video_url": media_result.get("segment_video_url"),
                             "segment_pose_video_url": media_result.get("segment_pose_video_url"),
+                            "segment_video_poster_url": media_result.get("segment_video_poster_url"),
+                            "segment_pose_video_poster_url": media_result.get("segment_pose_video_poster_url"),
                             "coach_advice": coach_advice
                         }
                     }
