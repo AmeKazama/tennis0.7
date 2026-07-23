@@ -466,7 +466,11 @@ class TennisAnalysisService:
                 cap.release()
             if writer is not None:
                 writer.release()
-    async def analyze_video_stream(self, video_bytes: bytes) -> AsyncGenerator[Dict[str, Any], None]:
+    async def analyze_video_stream(
+        self,
+        video_bytes: bytes,
+        selected_stroke: Optional[str] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析视频并流式返回结果。
         核心改动：用 asyncio.Queue + threading 桥接同步 run_analysis 和异步生成器，
@@ -554,6 +558,12 @@ class TennisAnalysisService:
 
                 elif msg_type == "shot":
                     res = data
+                    if selected_stroke and res.get("shot_type") != selected_stroke:
+                        print(
+                            f"[服务] 跳过片段 {res.get('shot_id')} - "
+                            f"{res.get('shot_type')}，当前仅分析 {selected_stroke}"
+                        )
+                        continue
                     print(f"[服务] 处理片段 {res['shot_id']} - {res['shot_type']}")
 
                     # 立刻格式化并调豆包

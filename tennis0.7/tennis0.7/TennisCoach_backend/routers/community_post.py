@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/community_post", tags=["community_post"])
 @router.post("/")
 def create_post(
     user_id: int,
+    title: Optional[str] = None,
     content: Optional[str] = None,
     media_type: Optional[str] = None,
     media_url: Optional[str] = None,
@@ -26,6 +27,7 @@ def create_post(
     try:
         post = CommunityPost(
             user_id=user_id,
+            title=(title or "").strip() or None,
             content=content,
             media_type=media_type,
             media_url=media_url,
@@ -68,6 +70,7 @@ def list_posts(
                 {
                     "id": p.id,
                     "user_id": p.user_id,
+                    "title": p.title,
                     "content": p.content,
                     "media_type": p.media_type,
                     "media_url": p.media_url,
@@ -96,6 +99,7 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
             data={
                 "id": post.id,
                 "user_id": post.user_id,
+                "title": post.title,
                 "content": post.content,
                 "media_type": post.media_type,
                 "media_url": post.media_url,
@@ -116,6 +120,7 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
 @router.put("/{post_id}")
 def update_post(
     post_id: int,
+    title: Optional[str] = None,
     content: Optional[str] = None,
     media_type: Optional[str] = None,
     media_url: Optional[str] = None,
@@ -129,6 +134,8 @@ def update_post(
         if not post:
             return error("帖子不存在", code=404)
 
+        if title is not None:
+            post.title = title.strip() or None
         if content is not None:
             post.content = content
         if media_type is not None:

@@ -1,6 +1,7 @@
 ﻿CREATE TABLE IF NOT EXISTS `community_post` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_id` BIGINT NOT NULL COMMENT '发布者用户ID',
+  `title` VARCHAR(120) DEFAULT NULL COMMENT '动态标题',
   `content` TEXT COMMENT '发布正文',
   `media_type` VARCHAR(20) DEFAULT NULL COMMENT '媒体类型：image/video/mixed',
   `media_url` VARCHAR(500) DEFAULT NULL COMMENT '媒体URL',

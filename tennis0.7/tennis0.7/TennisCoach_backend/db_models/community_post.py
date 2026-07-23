@@ -9,6 +9,7 @@ class CommunityPost(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
+    title = Column(String(120), nullable=True)
     content = Column(Text, nullable=True)
     media_type = Column(String(20), nullable=True)
     media_url = Column(String(500), nullable=True)
