@@ -12,7 +12,6 @@ import tempfile
 import threading
 import asyncio
 from pathlib import Path
-from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from services.rally_cutter_core import run_cut_pipeline
@@ -31,8 +30,6 @@ class RallyCutService:
 
     async def submit_cut(self, video_bytes: bytes,
                          output_dir: str = "output_rallies",
-                         calib_path: str = "court_calib.json",
-                         calibration_points: Optional[list] = None,
                          slow_speed: float = 3.0,
                          no_slow: bool = False,
                          no_net: bool = False,
@@ -43,7 +40,6 @@ class RallyCutService:
         Args:
             video_bytes: 视频文件二进制数据
             output_dir: 输出目录
-            calib_path: 球场标定文件路径
             slow_speed: 慢速速度阈值
             no_slow: 关闭慢速检测
             no_net: 关闭触网检测
@@ -101,7 +97,8 @@ class RallyCutService:
 
                 out_dir_abs = os.path.abspath(os.path.join(output_dir, task_id))
                 os.makedirs(out_dir_abs, exist_ok=True)
-                calib_abs = os.path.abspath(calib_path) if os.path.exists(calib_path) else calib_path
+                # 每个视频使用独立标定文件，避免复用其他机位或视频留下的球场参数。
+                calib_abs = os.path.join(out_dir_abs, "court_calib.json")
 
                 update_task(progress=30, message="已上传，开始进入回合识别管线")
                 stop_progress = threading.Event()
@@ -111,8 +108,8 @@ class RallyCutService:
                     video_path=temp_video,
                     output_dir=out_dir_abs,
                     calib_path=calib_abs,
-                    calibration_points=calibration_points,
                     allow_manual_calibration=False,
+                    recalib=True,
                     slow_speed=slow_speed,
                     no_slow=no_slow,
                     no_net_reversal=no_net,
@@ -133,7 +130,7 @@ class RallyCutService:
                 self._results[task_id] = {
                     "files": relative_files,
                     "count": len(files),
-                    "message": "" if files else "未识别到满足条件的有效回合，请检查标定点、视频时长或换一段包含完整回合的视频。",
+                    "message": "" if files else "未识别到满足条件的有效回合，请选择球场画面更清晰、时长更完整的视频。",
                 }
                 update_task(progress=100, message="分割完成", status="done")
                 logger.info(f"[切割 {task_id[:8]}] 完成，共 {len(files)} 个回合")
