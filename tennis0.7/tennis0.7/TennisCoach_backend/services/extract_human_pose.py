@@ -6,9 +6,14 @@ If the player is lost, we reset the RoI.
 """
 
 from argparse import ArgumentParser
+import os
+
 import tensorflow as tf
 import numpy as np
 import cv2
+
+# 模型路径按本文件定位，避免依赖启动时的工作目录
+_MOVENET_TFLITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "movenet.tflite")
 
 
 class RoI:
@@ -196,7 +201,11 @@ class HumanPoseExtractor:
 
     def __init__(self, shape):
         # Initialize the TFLite interpreter
-        self.interpreter = tf.lite.Interpreter(model_path="services/movenet.tflite", num_threads=1)
+        # 线程数可用环境变量覆盖；实测 8 逻辑核机器 4 线程即饱和
+        self.interpreter = tf.lite.Interpreter(
+            model_path=_MOVENET_TFLITE,
+            num_threads=int(os.getenv("MOVENET_THREADS", "4")),
+        )
         self.interpreter.allocate_tensors()
 
         self.roi = RoI(shape)

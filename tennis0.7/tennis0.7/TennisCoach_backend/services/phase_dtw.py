@@ -161,8 +161,13 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
         return round(float(np.degrees(np.arccos(cos))), 2)
 
     frame_angles = {}
+    # legacy Pose landmarks per frame id; reused by the pose-overlay video so
+    # the same mediapipe pass is not computed twice for identical inputs.
+    frame_landmarks = {}
+    # One seek then sequential reads: per-frame CAP_PROP_POS_FRAMES forces a
+    # keyframe-to-target decode for every iteration (O(n^2) on H.264 sources).
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     for fid in range(start_frame, end_frame + 1):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, fid)
         ret, frame = cap.read()
         if not ret:
             continue
@@ -175,10 +180,12 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
             if not result.pose_landmarks:
                 continue
             lm = result.pose_landmarks[0]
+            frame_landmarks[fid] = lm
         else:
             result = pose.process(rgb)
             if not result.pose_landmarks:
                 continue
+            frame_landmarks[fid] = result.pose_landmarks
             lm = result.pose_landmarks.landmark
         pt = lambda i: np.array([lm[i].x * w, lm[i].y * h])
         ms = (pt(11) + pt(12)) / 2
@@ -228,6 +235,8 @@ def extract_mediapipe_annotation(video_path, window, shot_type, shot_id, impact_
         "total_frames": total_frames,
         "angles": angles,
         "key_angles": key_angles,
+        # private key: popped by the caller, never serialized into responses
+        "_overlay_landmarks": frame_landmarks,
     }
 
 

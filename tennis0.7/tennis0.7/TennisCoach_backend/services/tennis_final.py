@@ -917,6 +917,9 @@ class SkeletonRecorder:
 
         self.service_results = []
         self._on_shot_ready = None  # 回调：分析完一段立刻调用，供流式推送使用
+        # {shot_id: {frame_id: landmarks}}；由服务层注入（按请求隔离），
+        # 供骨骼视频复用分析姿态，避免同一 mediapipe 扫描算两遍
+        self.overlay_store = None
 
     def set_annotate_fn(self, fn):
         self._annotate_fn = fn
@@ -1153,6 +1156,11 @@ class SkeletonRecorder:
             impact_frame_id=impact_frame_id,
         )
         if analysis is not None:
+            # landmarks 对象不可序列化，必须移出 analysis dict，
+            # 否则会随 service_results/summary 进入 JSON 序列化路径
+            overlay_landmarks = analysis.pop("_overlay_landmarks", None) or {}
+            if overlay_landmarks and self.overlay_store is not None:
+                self.overlay_store[int(analysis["shot_id"])] = overlay_landmarks
             frame_start = int(window[0][0])
             frame_end = int(window[-1][0])
             fps = float(self.video_fps or 30.0)
@@ -1197,7 +1205,11 @@ class SkeletonRecorder:
                     shot_id,
                     impact_frame=impact_frame_id,
                 )
+                overlay_landmarks = {}
                 if user_annotation is not None:
+                    # reuse the mediapipe pass for the pose-overlay video;
+                    # must not leak into the serialized annotation
+                    overlay_landmarks = user_annotation.pop("_overlay_landmarks", None) or {}
                     phase_matches = compare_user_annotation(user_annotation)
                     if phase_matches:
                         best_phase = phase_matches[0]
@@ -1250,6 +1262,7 @@ class SkeletonRecorder:
                                 "standard_file": best_phase.get("file"),
                             },
                             "user_annotation": user_annotation,
+                            "_overlay_landmarks": overlay_landmarks,
                         }
             except Exception as e:
                 print(f"[阶段DTW] 失败，回退到旧DTW: {e}")
@@ -1368,7 +1381,8 @@ class SkeletonRecorder:
             "grade": grade,
             "distance": distance,
             "best_match": best_match,
-            "issues": issues
+            "issues": issues,
+            "_overlay_landmarks": {},
         }
 
 
@@ -1569,12 +1583,13 @@ def compute_recall_precision(gt, shots):
 # ===================================================================
 # 核心分析函数（命令行和 service 共用）
 # ===================================================================
-def run_analysis(video_path, model, args, service_mode=False, fps_override=None, on_shot_ready=None):
+def run_analysis(video_path, model, args, service_mode=False, fps_override=None, on_shot_ready=None, overlay_store=None):
     """
     执行完整的击球检测和分析。
     如果 service_mode=True，则返回 (shot_counter, skeleton_recorder, total_frames, fps)；
     否则直接显示 GUI 并返回 None。
     on_shot_ready: 可选回调，每当一个片段 DTW 分析完成立刻调用，参数为 analysis dict。
+    overlay_store: 可选 dict，按 shot_id 暂存分析姿态 landmarks，供骨骼视频复用。
     """
     # 初始化骨架记录器
     # service 模式下使用临时目录（避免 Windows 路径问题）
@@ -1593,6 +1608,7 @@ def run_analysis(video_path, model, args, service_mode=False, fps_override=None,
         service_mode=service_mode,
     )
     skeleton_recorder._on_shot_ready = on_shot_ready  # 注入回调
+    skeleton_recorder.overlay_store = overlay_store  # 注入按请求隔离的姿态缓存
 
     shot_counter = ShotCounter(skeleton_recorder=skeleton_recorder)
     gt = GT(args.evaluate) if args.evaluate and not service_mode else None

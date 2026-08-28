@@ -64,7 +64,14 @@ class TennisAnalysisService:
         if self.model is None:
             print(f"[服务] 加载 RNN 模型: {self.model_path}")
             self.model = keras.saving.load_model(self.model_path)
-            print(f"[服务] RNN 模型加载完成")
+            # RNN 逐帧滑窗推理：eager 模式单次 ~140ms（框架开销主导），
+            # tf.function 图执行降到 ~2ms，对 30 帧滑窗逐帧调用的主循环收益直接反映在总耗时。
+            import tensorflow as tf
+            _model = self.model
+            self.model = tf.function(
+                lambda x: _model(x, training=False), reduce_retracing=True
+            )
+            print(f"[服务] RNN 模型加载完成（tf.function 图执行）")
 
         if self.doubao_service is None:
             self.doubao_service = DoubaoService()
@@ -275,7 +282,12 @@ class TennisAnalysisService:
             if cap is not None:
                 cap.release()
 
-    def _create_segment_media(self, video_path: str, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_segment_media(
+        self,
+        video_path: str,
+        analysis_result: Dict[str, Any],
+        overlay_store: Optional[Dict[int, Any]] = None,
+    ) -> Dict[str, Any]:
         """生成单个动作对应的 H.264 原片和骨架片段。"""
         segment_id = int(analysis_result.get("shot_id") or 0)
         frame_start = analysis_result.get("frame_start")
@@ -304,31 +316,33 @@ class TennisAnalysisService:
         if not raw_path.exists():
             return media
 
-        pose_intermediate_url = self._create_pose_overlay_video(str(raw_path))
+        # map cached landmarks (keyed by source-video frame id) to the clip's
+        # own 0-based frame index, so the overlay pass skips re-running
+        # mediapipe on frames the analysis already processed
+        overlay_landmarks = (overlay_store or {}).pop(segment_id, None) or {}
+        if overlay_landmarks and frame_start:
+            try:
+                base = int(frame_start)
+                overlay_landmarks = {int(fid) - base: lm for fid, lm in overlay_landmarks.items()}
+            except (TypeError, ValueError):
+                overlay_landmarks = {}
+
+        pose_intermediate_url = self._create_pose_overlay_video(
+            str(raw_path), precomputed_landmarks=overlay_landmarks
+        )
         if not pose_intermediate_url:
             return media
 
-        pose_intermediate_path = Path(pose_intermediate_url.lstrip("/"))
-        try:
-            if pose_intermediate_path.exists():
-                pose_url = self._create_video_clip(
-                    str(pose_intermediate_path),
-                    1,
-                    2_147_483_647,
-                    f"segment_pose_{segment_id}",
-                )
-                media["segment_pose_video_url"] = pose_url
-                media["segment_pose_video_poster_url"] = self._create_video_poster(pose_url)
-        finally:
-            if pose_intermediate_path.exists():
-                try:
-                    pose_intermediate_path.unlink()
-                except OSError:
-                    pass
+        # overlay output is already a faststart H.264 mp4; publish as-is
+        # instead of re-encoding the whole clip a second time
+        media["segment_pose_video_url"] = pose_intermediate_url
+        media["segment_pose_video_poster_url"] = self._create_video_poster(pose_intermediate_url)
 
         return media
 
-    def _create_pose_overlay_video(self, video_path: str) -> Optional[str]:
+    def _create_pose_overlay_video(
+        self, video_path: str, precomputed_landmarks: Optional[Dict[int, Any]] = None
+    ) -> Optional[str]:
         """使用 MediaPipe 在原视频上绘制人体骨骼，并返回可被前端访问的静态 URL。"""
         cap = None
         writer = None
@@ -356,25 +370,60 @@ class TennisAnalysisService:
 
             output_name = None
             output_path = None
-            for fourcc_name, ext in [("avc1", "mp4"), ("H264", "mp4"), ("mp4v", "mp4"), ("VP80", "webm")]:
-                candidate_name = f"{output_stem}.{ext}"
-                candidate_path = output_dir / candidate_name
-                candidate_writer = cv2.VideoWriter(
-                    str(candidate_path),
-                    cv2.VideoWriter_fourcc(*fourcc_name),
-                    fps,
-                    (width, height),
-                )
-                if candidate_writer.isOpened():
-                    writer = candidate_writer
-                    output_name = candidate_name
-                    output_path = candidate_path
-                    break
-                candidate_writer.release()
+            ffmpeg_proc = None
+            if hasattr(mp, "solutions"):
+                # legacy environment: keep the cv2 writer
+                for fourcc_name, ext in [("avc1", "mp4"), ("H264", "mp4"), ("mp4v", "mp4"), ("VP80", "webm")]:
+                    candidate_name = f"{output_stem}.{ext}"
+                    candidate_path = output_dir / candidate_name
+                    candidate_writer = cv2.VideoWriter(
+                        str(candidate_path),
+                        cv2.VideoWriter_fourcc(*fourcc_name),
+                        fps,
+                        (width, height),
+                    )
+                    if candidate_writer.isOpened():
+                        writer = candidate_writer
+                        output_name = candidate_name
+                        output_path = candidate_path
+                        break
+                    candidate_writer.release()
 
-            if writer is None or output_name is None or output_path is None:
-                print("[服务] 骨骼可视化视频生成失败: 无法创建视频写入器")
-                return None
+                if writer is None or output_name is None or output_path is None:
+                    print("[服务] 骨骼可视化视频生成失败: 无法创建视频写入器")
+                    return None
+            else:
+                # tasks environment: pipe raw frames into ffmpeg; veryfast only
+                # affects encode speed, CRF 23 keeps quality on par with clips,
+                # faststart removes the need for a second remux pass
+                import subprocess
+                import imageio_ffmpeg
+
+                output_name = f"{output_stem}.mp4"
+                output_path = output_dir / output_name
+                ffmpeg_proc = subprocess.Popen(
+                    [
+                        imageio_ffmpeg.get_ffmpeg_exe(),
+                        "-y",
+                        "-loglevel", "error",
+                        "-f", "rawvideo",
+                        "-pix_fmt", "bgr24",
+                        "-s", f"{width}x{height}",
+                        "-r", f"{fps:.6f}",
+                        "-i", "-",
+                        "-an",
+                        "-c:v", "libx264",
+                        "-preset", "veryfast",
+                        "-crf", "23",
+                        "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        str(output_path),
+                    ],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=False,
+                )
 
             if hasattr(mp, "solutions"):
                 pose_module = mp.solutions.pose
@@ -389,23 +438,36 @@ class TennisAnalysisService:
                     min_tracking_confidence=0.5,
                 )
 
+                frame_idx = 0
+                reuse_hits = 0
                 while True:
                     ok, frame = cap.read()
                     if not ok:
                         break
 
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    result = pose.process(rgb)
-                    if result.pose_landmarks:
+                    landmarks = None
+                    if precomputed_landmarks and frame_idx in precomputed_landmarks:
+                        landmarks = precomputed_landmarks[frame_idx]
+                        reuse_hits += 1
+                    else:
+                        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        result = pose.process(rgb)
+                        if result.pose_landmarks:
+                            landmarks = result.pose_landmarks
+
+                    if landmarks:
                         drawing_utils.draw_landmarks(
                             frame,
-                            result.pose_landmarks,
+                            landmarks,
                             pose_module.POSE_CONNECTIONS,
                             landmark_drawing_spec=landmark_spec,
                             connection_drawing_spec=connection_spec,
                         )
 
                     writer.write(frame)
+                    frame_idx += 1
+                if precomputed_landmarks:
+                    print(f"[服务] 骨骼视频复用分析姿态: {reuse_hits}/{frame_idx} 帧")
             else:
                 model_path = self._find_pose_landmarker_model()
                 if model_path is None:
@@ -432,25 +494,47 @@ class TennisAnalysisService:
                 pose = vision.PoseLandmarker.create_from_options(options)
 
                 frame_index = 0
+                reuse_hits = 0
                 while True:
                     ok, frame = cap.read()
                     if not ok:
                         break
 
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                    timestamp_ms = int(frame_index * 1000 / fps)
-                    result = pose.detect_for_video(image, timestamp_ms)
-                    if result.pose_landmarks:
+                    landmarks = None
+                    if precomputed_landmarks and frame_index in precomputed_landmarks:
+                        landmarks = precomputed_landmarks[frame_index]
+                        reuse_hits += 1
+                    else:
+                        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                        timestamp_ms = int(frame_index * 1000 / fps)
+                        result = pose.detect_for_video(image, timestamp_ms)
+                        if result.pose_landmarks:
+                            landmarks = result.pose_landmarks[0]
+
+                    if landmarks:
                         self._draw_tasks_pose_landmarks(
                             frame,
-                            result.pose_landmarks[0],
+                            landmarks,
                             width,
                             height,
                         )
 
-                    writer.write(frame)
+                    try:
+                        ffmpeg_proc.stdin.write(frame.tobytes())
+                    except BrokenPipeError:
+                        print("[服务] 骨骼可视化视频生成失败: ffmpeg 管道中断")
+                        return None
                     frame_index += 1
+                if precomputed_landmarks:
+                    print(f"[服务] 骨骼视频复用分析姿态: {reuse_hits}/{frame_index} 帧")
+
+                ffmpeg_proc.stdin.close()
+                ffmpeg_proc.wait(timeout=120)
+                if ffmpeg_proc.returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
+                    err_tail = (ffmpeg_proc.stderr.read() or b"")[-500:]
+                    print(f"[服务] 骨骼可视化视频生成失败: ffmpeg {err_tail}")
+                    return None
 
             print(f"[服务] 骨骼可视化视频已生成: {output_path}")
             return f"/uploads/action_analysis/{output_name}"
@@ -466,6 +550,13 @@ class TennisAnalysisService:
                 cap.release()
             if writer is not None:
                 writer.release()
+            if ffmpeg_proc is not None and ffmpeg_proc.poll() is None:
+                # early-return paths: make sure the child does not linger
+                try:
+                    ffmpeg_proc.stdin.close()
+                except Exception:
+                    pass
+                ffmpeg_proc.wait(timeout=30)
     async def analyze_video_stream(
         self,
         video_bytes: bytes,
@@ -505,6 +596,8 @@ class TennisAnalysisService:
             queue: asyncio.Queue = asyncio.Queue()
 
             # 每分析完一段，同步线程通过此回调放入 queue
+            overlay_store: Dict[int, Any] = {}
+
             def on_shot_ready(analysis_result):
                 asyncio.run_coroutine_threadsafe(
                     queue.put(("shot", analysis_result)), loop
@@ -521,6 +614,7 @@ class TennisAnalysisService:
                         args,
                         service_mode=True,
                         on_shot_ready=on_shot_ready,
+                        overlay_store=overlay_store,
                     )
                     service_results = list(skeleton_recorder.service_results)
                     _summary_holder["data"] = {
@@ -580,7 +674,7 @@ class TennisAnalysisService:
                     # 建议生成和片段视频生成并行执行，完成后作为同一条结果返回。
                     advice_result, media_result = await asyncio.gather(
                         self.doubao_service.get_coach_advice(report),
-                        asyncio.to_thread(self._create_segment_media, temp_video_path, res),
+                        asyncio.to_thread(self._create_segment_media, temp_video_path, res, overlay_store),
                         return_exceptions=True,
                     )
                     if isinstance(advice_result, Exception):
