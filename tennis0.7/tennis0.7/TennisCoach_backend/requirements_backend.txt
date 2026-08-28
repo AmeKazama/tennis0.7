@@ -10,3 +10,20 @@ chardet==5.2.0
 edge-tts
 imageio-ffmpeg==0.5.1
 mediapipe==0.10.35
+
+# ---- 深度学习运行时与视觉依赖（代码实际使用，原清单缺失）----
+# 注意：torch/torchvision 必须装 CPU 版，直接从 PyPI 安装会拉到 CUDA 编译版，
+# 与 CPU torch 出现 "torchvision::nms does not exist" 算子不匹配：
+#   pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+torchvision==0.28.0+cpu
+tensorflow==2.21.0
+tensorflow-hub==0.16.1
+ultralytics==8.4.131
+opencv-python==5.0.0.93
+opencv-contrib-python==5.0.0.93
+pandas==3.0.5
+scipy==1.18.1
+fastdtw==0.3.4
+matplotlib==3.11.1
+pillow==12.3.0

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import asyncio
 import json
+import os
 import traceback
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -417,8 +418,9 @@ if __name__ == "__main__":
     logger.info("[START] 网球 AI 教练后端服务启动中...")
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=6006,
+        # 生产部署绑 127.0.0.1（对外统一走 Nginx），默认保持历史行为
+        host=os.getenv("APP_HOST", "0.0.0.0"),
+        port=int(os.getenv("APP_PORT", "6006")),
         log_level="info",
         # ws_max_size=16777216,
         # ssl_keyfile="./key.pem",
